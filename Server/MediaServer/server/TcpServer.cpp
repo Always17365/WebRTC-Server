@@ -84,7 +84,7 @@ bool TcpServer::Start(int port, int maxConnection, const char *ip) {
 	bool bFlag = true;
 
 	LogAync(
-			LOG_MSG,
+			LOG_INFO,
 			"TcpServer::Start( "
 			"port : %u, "
 			"maxConnection : %d, "
@@ -107,7 +107,7 @@ bool TcpServer::Start(int port, int maxConnection, const char *ip) {
 	struct sockaddr_in ac_addr;
 	if ((fd = socket(AF_INET, SOCK_STREAM, 0)) == -1) {
 		LogAync(
-				LOG_ERR_SYS,
+				LOG_ALERT,
 				"TcpServer::Start( "
 				"[Create socket error], "
 				"port : %d, "
@@ -142,7 +142,7 @@ bool TcpServer::Start(int port, int maxConnection, const char *ip) {
 
 		if ( bind(mpSocket->fd, (struct sockaddr *) &ac_addr, sizeof(struct sockaddr)) == -1 ) {
 			LogAync(
-					LOG_ERR_SYS,
+					LOG_ALERT,
 					"TcpServer::Start( "
 					"[Bind socket error], "
 					"port : %d, "
@@ -160,7 +160,7 @@ bool TcpServer::Start(int port, int maxConnection, const char *ip) {
 	if( bFlag ) {
 		if ( listen(mpSocket->fd, 1024) == -1 ) {
 			LogAync(
-					LOG_ERR_SYS,
+					LOG_ALERT,
 					"TcpServer::Start( "
 					"[Listen socket error], "
 					"port : %d, "
@@ -184,7 +184,7 @@ bool TcpServer::Start(int port, int maxConnection, const char *ip) {
 			}
 		}
 		LogAync(
-				LOG_STAT,
+				LOG_DEBUG,
 				"TcpServer::Start( "
 				"[Create watchers OK], "
 				"port : %d, "
@@ -207,7 +207,7 @@ bool TcpServer::Start(int port, int maxConnection, const char *ip) {
 		// 启动IO监听线程
 		if( 0 == mIOThread.Start(mpIORunnable, "TcpServer") ) {
 			LogAync(
-					LOG_ERR_SYS,
+					LOG_ALERT,
 					"TcpServer::Start( [Create IO thread Fail], "
 					"port : %d, "
 					"maxConnection : %d, "
@@ -223,7 +223,7 @@ bool TcpServer::Start(int port, int maxConnection, const char *ip) {
 
 	if( bFlag ) {
 		LogAync(
-				LOG_MSG,
+				LOG_INFO,
 				"TcpServer::Start( "
 				"[OK], "
 				"port : %d, "
@@ -236,7 +236,7 @@ bool TcpServer::Start(int port, int maxConnection, const char *ip) {
 				);
 	} else {
 		LogAync(
-				LOG_ERR_SYS,
+				LOG_ALERT,
 				"TcpServer::Start( "
 				"[Fail], "
 				"port : %d, "
@@ -257,7 +257,7 @@ bool TcpServer::Start(int port, int maxConnection, const char *ip) {
 
 void TcpServer::Stop() {
 	LogAync(
-			LOG_MSG,
+			LOG_INFO,
 			"TcpServer::Stop( "
 			"port : %u, "
 			"maxConnection : %d, "
@@ -301,7 +301,7 @@ void TcpServer::Stop() {
 	mServerMutex.unlock();
 
 	LogAync(
-			LOG_MSG,
+			LOG_INFO,
 			"TcpServer::Stop( "
 			"[OK], "
 			"port : %u, "
@@ -319,19 +319,26 @@ bool TcpServer::IsRunning() {
 	return mRunning;
 }
 
+void TcpServer::Close() {
+	// 关闭监听socket
+	mpSocket->Close();
+}
+
 SocketStatus TcpServer::Read(Socket* socket, const char *data, int &len) {
 	SocketStatus status = socket->Read(data, len);
 
 	LogAync(
-			LOG_STAT,
+			LOG_DEBUG,
 			"TcpServer::Read( "
 			"fd : %d, "
 			"socket : %p, "
-			"status : %d "
+			"status : %d, "
+			"len : %d "
 			")",
 			socket->fd,
 			socket,
-			status
+			status,
+			len
 			);
 
 	if( status == SocketStatusFail ) {
@@ -348,7 +355,7 @@ bool TcpServer::Send(Socket* socket, const char *data, int &len) {
 
 void TcpServer::Disconnect(Socket* socket) {
 	LogAync(
-			LOG_STAT,
+			LOG_DEBUG,
 			"TcpServer::Disconnect( "
 			"fd : %d, "
 			"socket : %p "
@@ -361,9 +368,27 @@ void TcpServer::Disconnect(Socket* socket) {
 	socket->Disconnect();
 }
 
+void TcpServer::DisconnectSync(Socket* socket) {
+	LogAync(
+			LOG_DEBUG,
+			"TcpServer::DisconnectSync( "
+			"fd : %d, "
+			"socket : %p "
+			")",
+			socket->fd,
+			socket
+			);
+
+	// 马上断开, 停止监听epoll
+	StopEvIO(socket->w);
+
+	// 断开连接
+	socket->Disconnect();
+}
+
 void TcpServer::Close(Socket* socket) {
 	LogAync(
-			LOG_STAT,
+			LOG_DEBUG,
 			"TcpServer::Close( "
 			"fd : %d, "
 			"socket : %p "
@@ -381,7 +406,7 @@ void TcpServer::Close(Socket* socket) {
 
 void TcpServer::IOHandleThread() {
 	LogAync(
-			LOG_MSG,
+			LOG_INFO,
 			"TcpServer::IOHandleThread( [Start] )"
 			);
 
@@ -397,16 +422,16 @@ void TcpServer::IOHandleThread() {
 	ev_run(mLoop, 0);
 
 	LogAync(
-			LOG_MSG,
+			LOG_INFO,
 			"TcpServer::IOHandleThread( "
-			"[Exit]"
+			"[Exit] "
 			")"
 			);
 }
 
 void TcpServer::IOHandleAccept(::ev_io *w, int revents) {
 	LogAync(
-			LOG_STAT,
+			LOG_DEBUG,
 			"TcpServer::IOHandleAccept( "
 			"[Start] "
 //			"fd : %d "
@@ -419,11 +444,11 @@ void TcpServer::IOHandleAccept(::ev_io *w, int revents) {
 	socklen_t iAddrLen = sizeof(struct sockaddr);
 	while ( (clientfd = accept(w->fd, (struct sockaddr *)&addr, &iAddrLen)) < 0 ) {
 		int errNo = errno;
-		if ( errNo == EAGAIN || errNo == EWOULDBLOCK ) {
+		if ( errNo == EAGAIN || errNo == EWOULDBLOCK || errNo == EINTR ) {
 			LogAync(
-					LOG_STAT,
+					LOG_DEBUG,
 					"TcpServer::IOHandleAccept( "
-					"[errno == EAGAIN ||errno == EWOULDBLOCK] "
+					"[EAGAIN || EWOULDBLOCK || EINTR]"
 //					"fd : %d "
 					")"
 //					w->fd
@@ -480,7 +505,7 @@ void TcpServer::IOHandleAccept(::ev_io *w, int revents) {
 			if( (watcher = mWatcherList.PopFront()) != NULL ) {
 				// 接受连接
 				LogAync(
-						LOG_STAT,
+						LOG_DEBUG,
 						"TcpServer::IOHandleAccept( "
 						"[Accept client], "
 						"fd : %d, "
@@ -545,7 +570,7 @@ void TcpServer::IOHandleAccept(::ev_io *w, int revents) {
 	}
 
 	LogAync(
-			LOG_STAT,
+			LOG_DEBUG,
 			"TcpServer::IOHandleAccept( "
 			"[Exit] "
 //			"fd : %d "
@@ -558,7 +583,7 @@ void TcpServer::IOHandleRecv(::ev_io *w, int revents) {
 	Socket* socket = (Socket *)w->data;
 
 	LogAync(
-			LOG_STAT,
+			LOG_DEBUG,
 			"TcpServer::IOHandleRecv( "
 			"[Start], "
 			"fd : %d, "
@@ -572,7 +597,7 @@ void TcpServer::IOHandleRecv(::ev_io *w, int revents) {
 
 	if( revents & EV_ERROR ) {
 		LogAync(
-				LOG_STAT,
+				LOG_DEBUG,
 				"TcpServer::IOHandleRecv( "
 				"[revents & EV_ERROR], "
 				"fd : %d, "
@@ -589,7 +614,7 @@ void TcpServer::IOHandleRecv(::ev_io *w, int revents) {
 
 	} else {
 		LogAync(
-				LOG_STAT,
+				LOG_DEBUG,
 				"TcpServer::IOHandleRecv( "
 				"[OnRecvEvent], "
 				"fd : %d, "
@@ -604,7 +629,7 @@ void TcpServer::IOHandleRecv(::ev_io *w, int revents) {
 	}
 
 	LogAync(
-			LOG_STAT,
+			LOG_DEBUG,
 			"TcpServer::IOHandleRecv( "
 			"[Exit], "
 			"fd : %d, "
@@ -617,7 +642,7 @@ void TcpServer::IOHandleRecv(::ev_io *w, int revents) {
 
 void TcpServer::IOHandleOnDisconnect(Socket* socket) {
 	LogAync(
-			LOG_STAT,
+			LOG_DEBUG,
 			"TcpServer::IOHandleOnDisconnect( "
 			"socket : %p "
 			")",
@@ -634,7 +659,7 @@ void TcpServer::StopEvIO(::ev_io *w) {
 	if( w != NULL ) {
 		int fd = w->fd;
 		LogAync(
-				LOG_STAT,
+				LOG_DEBUG,
 				"TcpServer::StopEvIO( "
 				"fd : %d "
 				")",
@@ -649,7 +674,7 @@ void TcpServer::StopEvIO(::ev_io *w) {
 		if( mWatcherList.Size() <= (size_t)miMaxConnection ) {
 			// 空闲的缓存小于设定值
 			LogAync(
-					LOG_STAT,
+					LOG_DEBUG,
 					"TcpServer::StopEvIO( "
 					"[Return ev_io to idle list], "
 					"fd : %d "

@@ -1,5 +1,0 @@
-file media-server
-set args -f media-server.config
-handle SIGPIPE noprint
-source gdb.break
-run

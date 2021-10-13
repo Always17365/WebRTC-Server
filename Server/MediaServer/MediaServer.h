@@ -11,6 +11,8 @@
 
 #include <uuid/uuid.h>
 
+#include <Version.h>
+
 // Common
 #include <common/LogManager.h>
 #include <common/ConfFile.hpp>
@@ -34,7 +36,8 @@
 // WebRTC
 #include <webrtc/WebRTC.h>
 // ErrorCode
-#include <ErrCode.h>
+#include <include/ErrCode.h>
+#include <include/ForkNotice.h>
 
 using namespace mediaserver;
 
@@ -43,8 +46,7 @@ using namespace mediaserver;
 #include <list>
 using namespace std;
 
-#define VERSION_STRING "1.0.0"
-#define REQUEST_TIME_OUT_MS 30000
+#define REQUEST_TIME_OUT_MS 60000
 
 // 在线连接对象
 struct MediaClient {
@@ -62,6 +64,7 @@ struct MediaClient {
 		startMediaTime = 0;
 		logined = false;
 		uuid = "";
+		userAgent = "";
 		extParam = "";
 	}
 
@@ -76,6 +79,7 @@ struct MediaClient {
 		startMediaTime = item.startMediaTime;
 		logined = item.logined;
 		uuid = item.uuid;
+		userAgent = item.userAgent;
 		extParam = item.extParam;
 		return *this;
 	}
@@ -106,6 +110,7 @@ struct MediaClient {
 	bool logined;
 
 	string uuid;
+	string userAgent;
 	string extParam;
 };
 
@@ -139,18 +144,22 @@ typedef KSafeList<MediaClient *> MediaClientList;
 // 外部请求队列
 typedef KSafeList<ExtRequestItem *> ExtRequestList;
 
-class ExtRequestRunnable;
-class TimeoutCheckRunnable;
 class StateRunnable;
+class TimeoutCheckRunnable;
+class ExtRequestRunnable;
+class RecycleRunnable;
+
 class MediaServer :
 		public AsyncIOServerCallback,
 		public HttpParserCallback,
 		public WebRTCCallback,
-		public WSServerCallback
+		public WSServerCallback,
+		public ForkNotice
 {
-	friend class ExtRequestRunnable;
-	friend class TimeoutCheckRunnable;
 	friend class StateRunnable;
+	friend class TimeoutCheckRunnable;
+	friend class ExtRequestRunnable;
+	friend class RecycleRunnable;
 
 public:
 	MediaServer();
@@ -172,7 +181,7 @@ public:
 	/**
 	 * 清除进程信息
 	 */
-	void Exit();
+	void Exit(int signal);
 
 	/***************************** 内部服务(HTTP), 命令回调 **************************************/
 	// AsyncIOServerCallback
@@ -192,7 +201,7 @@ public:
 	/***************************** WebRTCCallback **************************************/
 	void OnWebRTCServerSdp(WebRTC *rtc, const string& sdp, WebRTCMediaType type);
 	void OnWebRTCStartMedia(WebRTC *rtc);
-	void OnWebRTCError(WebRTC *rtc, WebRTCErrorType errType, const string& errMsg);
+	void OnWebRTCError(WebRTC *rtc, RequestErrorType errType, const string& errMsg);
 	void OnWebRTCClose(WebRTC *rtc);
 	/***************************** WebRTCCallback **************************************/
 
@@ -201,6 +210,10 @@ public:
 	void OnWSClose(WSServer *server, connection_hdl hdl);
 	void OnWSMessage(WSServer *server, connection_hdl hdl, const string& str);
 	/***************************** WSServerCallback **************************************/
+
+	void OnForkBefore();
+	void OnForkParent();
+	void OnForkChild();
 
 private:
 	/**
@@ -232,6 +245,11 @@ private:
 	 * 外部请求线程处理
 	 */
 	void ExtRequestHandle();
+
+	/**
+	 * 回收资源线程处理
+	 */
+	void RecycleHandle();
 	/***************************** 定时任务 **************************************/
 
 
@@ -263,7 +281,7 @@ private:
 	/**
 	 * 获取错误信息结构体
 	 */
-	void GetErrorObject(Json::Value &resErrorNo, Json::Value &resErrorMsg, RequestErrorType errType);
+	void GetErrorObject(Json::Value &resErrorNo, Json::Value &resErrorMsg, RequestErrorType errType, const string msg = "");
 	/**
 	 * 外部同步在线状态
 	 */
@@ -284,7 +302,7 @@ private:
 private:
 	/***************************** 内部服务(HTTP)参数 **************************************/
 	// 监听端口
-	short miPort;
+	int miPort;
 	// 最大连接数
 	int miMaxClient;
 	// 处理线程数目
@@ -299,7 +317,7 @@ private:
 
 	/***************************** 媒体流服务(WebRTC)参数 **************************************/
 	// 媒体流转发起始端口
-	unsigned short mWebRTCPortStart;
+	int mWebRTCPortStart;
 	// 最大媒体流转发数
 	unsigned int mWebRTCMaxClient;
 
@@ -307,6 +325,14 @@ private:
 	string mWebRTCRtp2RtmpShellFilePath;
 	// 执行转发RTMP的地址
 	string mWebRTCRtp2RtmpBaseUrl;
+	// 执行转发RTMP的地址(全录制)
+	string mWebRTCRtp2RtmpBaseRecordUrl;
+	// 执行转发RTP的脚本
+	string mWebRTCRtmp2RtpShellFilePath;
+	// 执行转发RTP的地址
+	string mWebRTCRtmp2RtpBaseUrl;
+	// 是否等待视频帧才开始转发
+	bool mWebRTCVSync;
 
 	// DTLS证书路径
 	string mWebRTCDtlsCertPath;
@@ -316,17 +342,25 @@ private:
 	string mWebRTCLocalIp;
 	// STUN服务器IP
 	string mStunServerIp;
+	// STUN服务器外网IP
+	string mStunServerExtIp;
+	// 是否使用共享密钥
+	bool mbTurnUseSecret;
 	// TURN用户名
 	string mTurnUserName;
 	// TURN密码
 	string mTurnPassword;
+	// TURN共享密钥
+	string mTurnShareSecret;
+	// TURN共享密钥客户端有效时间(秒)
+	unsigned int mTurnClientTTL;
 	/***************************** 媒体流服务(WebRTC)参数 **************************************/
 
 
 
 	/***************************** 信令服务(Websocket)参数 **************************************/
 	// 监听端口
-	short miWebsocketPort;
+	int miWebsocketPort;
 	// 最大连接数
 	unsigned int miWebsocketMaxClient;
 	// 外部上下线校验接口路径(空则不开启)
@@ -375,6 +409,10 @@ private:
 	// 外部登录校验线程
 	ExtRequestRunnable* mpExtRequestRunnable;
 	KThread mExtRequestThread;
+
+	// 资源回收线程
+	RecycleRunnable* mpRecycleRunnable;
+	KThread mRecycleThread;
 	/***************************** 定时任务线程 **************************************/
 
 
@@ -401,6 +439,8 @@ private:
 	MediaClientMap mMediaClientMap;
 	// 可用的WebRTC Object
 	WebRTCList mWebRTCList;
+	// 待回收的WebRTC列表
+	WebRTCList mWebRTCRecycleList;
 	// 可用的MediaClient
 	MediaClientList mMediaClientList;
 	// 外部请求队列

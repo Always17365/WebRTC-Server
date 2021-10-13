@@ -22,9 +22,9 @@ using namespace mediaserver;
 // Common
 #include <common/LogManager.h>
 
-char ws[128] = {"192.168.88.133:9881"};
-char turn[128] = {"192.168.88.134"};
-char interface[128] = {""};
+char ws_host[128] = {"192.168.88.133:9981"};
+char turn[128] = {"192.168.88.133"};
+char interface[128] = {""};//{"192.168.88.134"};
 char name[128] = {"tester"};
 int iCurrent = 0;
 int iTotal = 1;
@@ -69,13 +69,13 @@ int main(int argc, char *argv[]) {
 
 	srand(time(0));
 
-	LogManager::GetLogManager()->Start(LOG_WARNING, "./log");
-	LogManager::GetLogManager()->SetDebugMode(true);
+	LogManager::GetLogManager()->Start(LOG_INFO, "./log");
+	LogManager::GetLogManager()->SetDebugMode(false);
 	LogManager::GetLogManager()->LogSetFlushBuffer(1 * BUFFER_SIZE_1K * BUFFER_SIZE_1K);
 
-	WebRTC::GobalInit("./ssl/tester.crt", "./ssl/tester.key", turn, interface);
+	WebRTCClient::GobalInit("./ssl/tester.crt", "./ssl/tester.key", turn, interface);
 
-    string baseUrl = "ws://" + string(ws);
+    string baseUrl = "ws://" + string(ws_host);
     bool bFlag = gTester.Start(name, baseUrl, iTotal, turn, iReconnect);
 
 	while( bFlag && gTester.IsRunning() ) {
@@ -95,13 +95,13 @@ bool Parse(int argc, char *argv[]) {
 		key = argv[i];
 		value = argv[i+1];
 
-		if( key.compare("-h") == 0 ) {
-			memset(ws, 0, sizeof(ws));
-			memcpy(ws, value.c_str(), value.length());
+		if( key.compare("-ws") == 0 ) {
+			memset(ws_host, 0, sizeof(ws_host));
+			memcpy(ws_host, value.c_str(), value.length());
 		} else if( key.compare("-name") == 0 ) {
 			memset(name, 0, sizeof(name));
 			memcpy(name, value.c_str(), value.length());
-		} else if( key.compare("-s") == 0 ) {
+		} else if( key.compare("-turn") == 0 ) {
 			memset(turn, 0, sizeof(turn));
 			memcpy(turn, value.c_str(), value.length());
 		} else if( key.compare("-i") == 0 ) {
@@ -114,7 +114,9 @@ bool Parse(int argc, char *argv[]) {
 		}
 	}
 
-	printf("# [ws : %s], [turn : %s], [name : %s], [iTotal : %d], [iReconnect : %d]\n", ws, turn, name, iTotal, iReconnect);
+	printf("# Usage: ./webrtc-tester -ws [WebsocketHost] -turn [TurnHost]  -name [Name] -i [LocalIp] -n [Count] -r [Reconnect] \n");
+	printf("# Example: ./webrtc-tester -ws 192.168.88.133:9981 -turn 192.168.88.133 -name tester -i 192.168.88.134 -n 1 -r 60 \n");
+	printf("# Config: [ws : %s], [turn : %s], [name : %s], [interface : %s], [iTotal : %d], [iReconnect : %d]\n", ws_host, turn, name, interface, iTotal, iReconnect);
 
 	return true;
 }
@@ -123,19 +125,24 @@ void SignalFunc(int sign_no) {
 	switch(sign_no) {
 	case SIGCHLD:{
 		int status;
-		int pid = waitpid(-1, &status, WNOHANG);
-		LogAync(
-				LOG_MSG, "main( waitpid : %d )", pid
-				);
-		MainLoop::GetMainLoop()->Call(pid);
+		int pid = 0;
+		while (true) {
+			int pid = waitpid(-1, &status, WNOHANG);
+			if ( pid > 0 ) {
+				printf("# main( waitpid : %d ) \n", pid);
+				MainLoop::GetMainLoop()->Call(pid);
+			} else {
+				break;
+			}
+		}
 	}break;
 	default:{
-		LogAync(
-				LOG_ERR_SYS, "main( Get signal : %d )", sign_no
+		LogAyncUnSafe(
+				LOG_ALERT, "main( Get signal : %d )", sign_no
 				);
+		MainLoop::GetMainLoop()->Exit(SIGTERM);
 		LogManager::GetLogManager()->LogFlushMem2File();
-		signal(sign_no, SIG_DFL);
-		kill(getpid(), sign_no);
+		exit(0);
 	}break;
 	}
 }

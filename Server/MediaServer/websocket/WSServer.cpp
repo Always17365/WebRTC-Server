@@ -56,7 +56,7 @@ bool WSServer::Start(int port, int maxConnection) {
 	bool bFlag = false;
 
 	LogAync(
-			LOG_MSG,
+			LOG_INFO,
 			"WSServer::Start( "
 			"port : %u, "
 			"maxConnection : %d "
@@ -75,7 +75,7 @@ bool WSServer::Start(int port, int maxConnection) {
         // Set logging settings
     	mServer.set_access_channels(log::alevel::none);
 //    	mServer.clear_access_channels(log::alevel::frame_payload);
-    	mServer.set_error_channels(log::alevel::none);
+    	mServer.set_error_channels(log::elevel::none);
 
         // Initialize Asio
     	mServer.init_asio();
@@ -90,6 +90,9 @@ bool WSServer::Start(int port, int maxConnection) {
         mServer.set_close_handler(bind(&WSServer::OnClose, this, ::_1));
     	mServer.set_message_handler(bind(&WSServer::OnMessage, this, ::_1, ::_2));
 //    	mServer.set_tls_init_handler(bind(&WSServer::OnTlsInit, 1, ::_1));
+
+    	lib::asio::error_code ec;
+    	lib::asio::ip::tcp::endpoint ep = mServer.get_local_endpoint(ec);
 
         // Listen on port
     	mServer.listen(lib::asio::ip::tcp::v4(), port);
@@ -121,7 +124,7 @@ bool WSServer::Start(int port, int maxConnection) {
 		// 启动IO监听线程
 		if( 0 == mIOThread.Start(mpIORunnable, "WSServer") ) {
 			LogAync(
-					LOG_ERR_SYS,
+					LOG_ALERT,
 					"WSServer::Start( "
 					"[Create IO Thread Fail], "
 					"port : %u, "
@@ -136,7 +139,7 @@ bool WSServer::Start(int port, int maxConnection) {
 
 	if( bFlag ) {
 		LogAync(
-				LOG_MSG,
+				LOG_INFO,
 				"WSServer::Start( "
 				"[OK], "
 				"port : %d, "
@@ -147,7 +150,7 @@ bool WSServer::Start(int port, int maxConnection) {
 				);
 	} else {
 		LogAync(
-				LOG_ERR_SYS,
+				LOG_ALERT,
 				"WSServer::Start( "
 				"[Fail], "
 				"port : %d, "
@@ -166,7 +169,7 @@ bool WSServer::Start(int port, int maxConnection) {
 
 void WSServer::Stop() {
 	LogAync(
-			LOG_MSG,
+			LOG_INFO,
 			"WSServer::Stop("
 			")"
 			);
@@ -176,7 +179,18 @@ void WSServer::Stop() {
 	if ( mRunning ) {
 		mRunning = false;
 		if( mServer.is_listening() ) {
-			mServer.stop_listening();
+		    try {
+		    	mServer.stop_listening();
+		    } catch (websocketpp::exception const & e) {
+		    	LogAync(
+		    			LOG_INFO,
+		    			"WSServer::Stop( "
+		    			"[Exception], "
+		    			"e : %s "
+		    			")",
+						e.what()
+		    			);
+		    }
 		}
 		/**
 		 * Must be call after mServer.init_asio()
@@ -188,20 +202,38 @@ void WSServer::Stop() {
 	mServerMutex.unlock();
 
 	LogAync(
-			LOG_MSG,
+			LOG_INFO,
 			"WSServer::Stop( "
 			"[OK] "
 			")"
 			);
 }
 
+void WSServer::OnForkBefore() {
+	mServer.get_io_service().notify_fork(boost::asio::io_service::fork_prepare);
+}
+
+void WSServer::OnForkParent() {
+	mServer.get_io_service().notify_fork(boost::asio::io_service::fork_parent);
+}
+
+void WSServer::OnForkChild() {
+	try {
+		mServer.get_io_service().notify_fork(boost::asio::io_service::fork_child);
+		if( mServer.is_listening() ) {
+			mServer.stop_listening();
+		}
+	} catch (websocketpp::exception const & e) {
+	}
+}
+
 bool WSServer::SendText(connection_hdl hdl, const string& str) {
 	server::connection_ptr conn = mServer.get_con_from_hdl(hdl);
 	LogAync(
-			LOG_STAT,
+			LOG_DEBUG,
 			"WSServer::SendText( "
 			"hdl : %p, "
-			"ip : %s, "
+			"addr : %s, "
 			"str(%u) : %s "
 			")",
 			hdl.lock().get(),
@@ -216,11 +248,11 @@ bool WSServer::SendText(connection_hdl hdl, const string& str) {
         bFlag = true;
     } catch (websocketpp::exception const & e) {
     	LogAync(
-    			LOG_MSG,
+    			LOG_INFO,
     			"WSServer::SendText( "
 				"hdl : %p, "
     			"[Exception], "
-				"ip : %s, "
+				"addr : %s, "
     			"e : %s, "
 				"str : %s "
     			")",
@@ -237,23 +269,38 @@ bool WSServer::SendText(connection_hdl hdl, const string& str) {
 void WSServer::Disconnect(connection_hdl hdl) {
 	server::connection_ptr conn = mServer.get_con_from_hdl(hdl);
 	LogAync(
-			LOG_STAT,
+			LOG_INFO,
 			"WSServer::Disconnect( "
 			"hdl : %p, "
-			"ip : %s "
+			"addr : %s "
 			")",
 			hdl.lock().get(),
 			conn->get_remote_endpoint().c_str()
 			);
 
-	mServer.close(hdl, 0, "Disconnect");
+	try {
+		mServer.close(hdl, websocketpp::close::status::normal, "Disconnect by server");
+	} catch (websocketpp::exception const & e) {
+	    	LogAync(
+	    			LOG_INFO,
+	    			"WSServer::Disconnect( "
+					"hdl : %p, "
+	    			"[Exception], "
+					"addr : %s, "
+	    			"e : %s "
+	    			")",
+					hdl.lock().get(),
+					conn->get_remote_endpoint().c_str(),
+					e.what()
+	    			);
+	}
 
 	LogAync(
-			LOG_STAT,
+			LOG_DEBUG,
 			"WSServer::Disconnect( "
 			"[Finish], "
 			"hdl : %p, "
-			"ip : %s "
+			"addr : %s "
 			")",
 			hdl.lock().get(),
 			conn->get_remote_endpoint().c_str()
@@ -291,11 +338,11 @@ void WSServer::Disconnect(connection_hdl hdl) {
 //
 //        if (SSL_CTX_set_cipher_list(ctx->native_handle() , ciphers.c_str()) != 1) {
 //        	LogAync(
-//        			LOG_ERR_SYS,
+//        			LOG_ALERT,
 //        			"WSServer::OnTlsInit( "
 //        			"[Error setting cipher list], "
 //        			"hdl : %p, "
-//        			"ip : %s "
+//        			"addr : %s "
 //        			")",
 //        			hdl.lock().get(),
 //        			conn->get_remote_endpoint().c_str()
@@ -303,11 +350,11 @@ void WSServer::Disconnect(connection_hdl hdl) {
 //        }
 //    } catch (std::exception& e) {
 //    	LogAync(
-//    			LOG_MSG,
+//    			LOG_INFO,
 //    			"WSServer::OnTlsInit( "
 //				"hdl : %p, "
 //    			"[Exception], "
-//				"ip : %s, "
+//				"addr : %s, "
 //    			"e : %s "
 //    			")",
 //				hdl.lock().get(),
@@ -321,7 +368,7 @@ void WSServer::Disconnect(connection_hdl hdl) {
 bool WSServer::OnValid(connection_hdl hdl) {
 	server::connection_ptr conn = mServer.get_con_from_hdl(hdl);
 	LogAync(
-			LOG_STAT,
+			LOG_DEBUG,
 			"WSServer::OnValid( "
 			"hdl : %p, "
 			"addr : %s "
@@ -337,7 +384,7 @@ void WSServer::OnOpen(connection_hdl hdl) {
 	server::connection_ptr conn = mServer.get_con_from_hdl(hdl);
 	string userAgent = conn->get_request_header("User-Agent");
 	LogAync(
-			LOG_STAT,
+			LOG_DEBUG,
 			"WSServer::OnOpen( "
 			"hdl : %p, "
 			"addr : %s, "
@@ -355,7 +402,7 @@ void WSServer::OnOpen(connection_hdl hdl) {
 
 void WSServer::OnClose(connection_hdl hdl) {
 	LogAync(
-			LOG_STAT,
+			LOG_DEBUG,
 			"WSServer::OnClose( "
 			"hdl : %p "
 			")",
@@ -371,10 +418,10 @@ void WSServer::OnMessage(websocketpp::connection_hdl hdl, message_ptr msg) {
 	server::connection_ptr conn = mServer.get_con_from_hdl(hdl);
 
 	LogAync(
-			LOG_STAT,
+			LOG_DEBUG,
 			"WSServer::OnMessage( "
 			"hdl : %p, "
-			"ip : %s, "
+			"addr : %s, "
 			"opcode : 0x%x, "
 			"payload : %s "
 			")",
@@ -391,7 +438,7 @@ void WSServer::OnMessage(websocketpp::connection_hdl hdl, message_ptr msg) {
 
 void WSServer::IOHandleThread() {
 	LogAync(
-			LOG_MSG,
+			LOG_INFO,
 			"WSServer::IOHandleThread( [Start] )"
 			);
 
@@ -417,7 +464,7 @@ void WSServer::IOHandleThread() {
     }
 
 	LogAync(
-			LOG_MSG,
+			LOG_INFO,
 			"WSServer::IOHandleThread( [Exit] )"
 			);
 }

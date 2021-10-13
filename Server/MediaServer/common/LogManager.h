@@ -25,6 +25,8 @@ using namespace std;
 
 #define DiffGetTickCount(start, end)    ((start) <= (end) ? (end) - (start) : ((unsigned int)(-1)) - (start) + (end))
 
+#define LogAyncUnSafe(level, fmt, ...) \
+		LogManager::GetLogManager()->LogUnSafe(__FILE__, __LINE__, level, fmt, ## __VA_ARGS__)
 #define LogAync(level, fmt, ...) \
 		LogManager::GetLogManager()->Log(__FILE__, __LINE__, level, fmt, ## __VA_ARGS__)
 
@@ -37,16 +39,18 @@ public:
 	LogManager();
 	virtual ~LogManager();
 
-	bool Start(LOG_LEVEL nLevel = LOG_STAT, const string& dir = "log");
+	bool Start(LOG_LEVEL nLevel = LOG_DEBUG, const string& dir = "log");
 	bool Stop();
 	bool IsRunning();
 	bool Log(const char *file, int line, LOG_LEVEL nLevel, const char *format, ...);
+	bool LogUnSafe(const char *file, int line, LOG_LEVEL nLevel, const char *format, ...);
 	int MkDir(const char* pDir);
-	void SetLogLevel(LOG_LEVEL nLevel = LOG_STAT);
+	void SetLogLevel(LOG_LEVEL nLevel = LOG_DEBUG);
 
 	void LogSetFlushBuffer(unsigned int iLen);
 	void LogFlushMem2File();
 	void SetDebugMode(bool debugMode);
+	void SetSTDMode(bool stdMode);
 
 private:
 	KThread mLogThread;
@@ -61,6 +65,7 @@ private:
 
 	CFileCtrl *mpFileCtrlDebug;
 	bool mDebugMode;
+	bool mSTDMode;
 };
 
 #endif /* LOGMANAGER_H_ */

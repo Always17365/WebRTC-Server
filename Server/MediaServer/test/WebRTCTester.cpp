@@ -23,7 +23,7 @@ void Tester::Handle(struct mg_connection *nc, int ev, void *ev_data) {
     switch (ev) {
 		case MG_EV_WEBSOCKET_HANDSHAKE_REQUEST:{
         	LogAync(
-        			LOG_MSG,
+        			LOG_NOTICE,
         			"Tester::Handle( "
 					"this : %p, "
 					"[Websocket-Handshake_Request], "
@@ -44,14 +44,17 @@ void Tester::Handle(struct mg_connection *nc, int ev, void *ev_data) {
 					tester,
 					tester->index
         			);
-        	tester->rtc.Start("");
+        	char name[1024] = {0};
+        	snprintf(name, sizeof(name), "%s", tester->stream.c_str());
+        	string iceName = name;
+        	tester->rtc.Start("", iceName);
 
         }break;
         case MG_EV_WEBSOCKET_FRAME:{
             // Receive Data
         	string str((const char*)wm->data, wm->size);
         	LogAync(
-        			LOG_MSG,
+        			LOG_NOTICE,
         			"Tester::Handle( "
 					"this : %p, "
 					"[Websocket-Recv_Data], "
@@ -81,7 +84,10 @@ void Tester::Handle(struct mg_connection *nc, int ev, void *ev_data) {
         			);
 
         	tester->rtc.Stop();
-        	tester->Start();
+
+        	if ( tester->bReconnect ) {
+            	tester->Start();
+        	}
 
         }break;
     }
@@ -91,17 +97,19 @@ Tester::Tester() : mMutex(KMutex::MutexType_Recursive) {
 	mgr = NULL;
 	conn = NULL;
 	index = 0;
+	bReconnect = true;
 }
 
 Tester::~Tester() {
 
 }
 
-bool Tester::Init(mg_mgr *mgr, const string& url, const string& stream, int index) {
+bool Tester::Init(mg_mgr *mgr, const string& url, const string& stream, int index, bool bReconnect) {
 	this->mgr = mgr;
 	this->url = url;
 	this->stream = stream;
 	this->index = index;
+	this->bReconnect = bReconnect;
 
 	rtc.Init("./push.sh", "127.0.0.1", 10000 + index);
 	rtc.SetCallback(this);
@@ -113,7 +121,7 @@ bool Tester::Start() {
     bool bFlag = false;
 
 	LogAync(
-			LOG_MSG,
+			LOG_NOTICE,
 			"Tester::Start( "
 			"this : %p, "
 			"url : %s, "
@@ -129,7 +137,7 @@ bool Tester::Start() {
 		opt.user_data = (void *)this;
 
 		mMutex.lock();
-		conn = mg_connect_ws_opt(mgr, Handle, opt, url.c_str(), "", "User-Agent: WebRTC-Tester\r\n");
+		conn = mg_connect_ws_opt(mgr, Handle, opt, url.c_str(), "", "User-Agent: WebRTCClient-Tester\r\n");
 		if ( NULL != conn && conn->err == 0 ) {
 			bFlag = true;
 		}
@@ -207,10 +215,10 @@ bool Tester::HandleRecvData(unsigned char *data, size_t size) {
 	return bFlag;
 }
 
-void Tester::OnWebRTCServerSdp(WebRTC *rtc, const string& sdp) {
+void Tester::OnWebRTCClientServerSdp(WebRTCClient *rtc, const string& sdp) {
 //	LogAync(
 //			LOG_WARNING,
-//			"Tester::OnWebRTCServerSdp( "
+//			"Tester::OnWebRTCClientServerSdp( "
 //			"this : %p, "
 //			"rtc : %p, "
 //			"sdp:\n%s"
@@ -240,12 +248,12 @@ void Tester::OnWebRTCServerSdp(WebRTC *rtc, const string& sdp) {
 	mMutex.unlock();
 }
 
-void Tester::OnWebRTCStartMedia(WebRTC *rtc) {
+void Tester::OnWebRTCClientStartMedia(WebRTCClient *rtc) {
 	LogAync(
 			LOG_WARNING,
-			"Tester::OnWebRTCStartMedia( "
+			"Tester::OnWebRTCClientStartMedia( "
 			"this : %p, "
-			"[WebRTC-开始媒体传输], "
+			"[WebRTCClient-开始媒体传输], "
 			"rtc : %p, "
 			"index : %d "
 			")",
@@ -255,10 +263,10 @@ void Tester::OnWebRTCStartMedia(WebRTC *rtc) {
 			);
 }
 
-void Tester::OnWebRTCError(WebRTC *rtc, WebRTCErrorType errType, const string& errMsg) {
+void Tester::OnWebRTCClientError(WebRTCClient *rtc, WebRTCClientErrorType errType, const string& errMsg) {
 	LogAync(
 			LOG_WARNING,
-			"Tester::OnWebRTCError( "
+			"Tester::OnWebRTCClientError( "
 			"this : %p, "
 			"rtc : %p, "
 			"index : %d "
@@ -276,10 +284,10 @@ void Tester::OnWebRTCError(WebRTC *rtc, WebRTCErrorType errType, const string& e
 	mMutex.unlock();
 }
 
-void Tester::OnWebRTCClose(WebRTC *rtc) {
+void Tester::OnWebRTCClientClose(WebRTCClient *rtc) {
 	LogAync(
 			LOG_WARNING,
-			"Tester::OnWebRTCClose( "
+			"Tester::OnWebRTCClientClose( "
 			"this : %p, "
 			"rtc : %p, "
 			"index : %d "
@@ -336,7 +344,7 @@ bool WebRTCTester::Start(const string& stream, const string& webSocketServer, un
 	bool bFlag = true;
 
 	LogAync(
-			LOG_ERR_SYS,
+			LOG_ALERT,
 			"WebRTCTester::Start( "
 			"iMaxCount : %d, "
 			"iReconnect : %d "
@@ -360,14 +368,14 @@ bool WebRTCTester::Start(const string& stream, const string& webSocketServer, un
 		sprintf(indexStr, "%u", i);
 		string wholeStream = stream + indexStr;
 
-		tester->Init(&mMgr, mWebSocketServer, wholeStream, i);
+		tester->Init(&mMgr, mWebSocketServer, wholeStream, i, (miReconnect >= 0));
 		tester->Start();
 	}
 
 	if( bFlag ) {
 		if( 0 == mThread.Start(mpRunnable, "TestMainThread") ) {
 			LogAync(
-					LOG_ERR_SYS,
+					LOG_ALERT,
 					"WebRTCTester::Start( "
 					"this : %p, "
 					"[Create Main Thread Fail] "
@@ -383,7 +391,7 @@ bool WebRTCTester::Start(const string& stream, const string& webSocketServer, un
 
 void WebRTCTester::Stop() {
 	LogAync(
-			LOG_ERR_SYS,
+			LOG_ALERT,
 			"WebRTCTester::Stop("
 			")"
 			);
@@ -399,7 +407,7 @@ bool WebRTCTester::IsRunning() {
 
 void WebRTCTester::MainThread() {
 	LogAync(
-			LOG_MSG,
+			LOG_NOTICE,
 			"WebRTCTester::MainThread( [Start] )"
 			);
 
@@ -441,7 +449,7 @@ void WebRTCTester::MainThread() {
 	}
 
 	LogAync(
-			LOG_MSG,
+			LOG_NOTICE,
 			"WebRTCTester::MainThread( [Exit] )"
 			);
 }

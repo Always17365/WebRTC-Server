@@ -48,6 +48,19 @@ bool UdpSender::Init(const string& sendIp, int sendPort) {
     	if ( setsockopt(mFd, SOL_SOCKET, SO_REUSEADDR, &bOptval, sizeof(int)) ) {
     		bFlag = false;
     	}
+
+//    	int bufferSize = 2 * 1024 * 1024;
+//    	while (bufferSize > 0) {
+//    		if (setsockopt(mFd, SOL_SOCKET, SO_RCVBUF, (const void*) (&bufferSize), (socklen_t) sizeof(bufferSize)) < 0) {
+//    			bufferSize = bufferSize / 2;
+//    		} else {
+//    			break;
+//    		}
+//    	}
+//    	if ( bufferSize < 1 ) {
+//    		bFlag = false;
+//    	}
+
     }
 
     if( bFlag ) {
@@ -59,7 +72,7 @@ bool UdpSender::Init(const string& sendIp, int sendPort) {
 
 	if( bFlag ) {
 		LogAync(
-				LOG_MSG,
+				LOG_INFO,
 				"UdpSender::Init( "
 				"this : %p, "
 				"[OK], "
@@ -74,7 +87,7 @@ bool UdpSender::Init(const string& sendIp, int sendPort) {
 				);
 	} else {
 		LogAync(
-				LOG_ERR_SYS,
+				LOG_ALERT,
 				"UdpSender::Init( "
 				"this : %p, "
 				"[Fail], "
@@ -94,7 +107,7 @@ bool UdpSender::Init(const string& sendIp, int sendPort) {
 void UdpSender::Close() {
 	if( mFd != -1 ) {
 		LogAync(
-				LOG_MSG,
+				LOG_INFO,
 				"UdpSender::Close( "
 				"this : %p, "
 				"fd : %d "
@@ -110,7 +123,7 @@ void UdpSender::Close() {
 int UdpSender::SendData(const void *data, unsigned int len) {
 	int sendSize = sendto(mFd, data, len, 0, (struct sockaddr *)&mSendSockAddr, sizeof(struct sockaddr_in));
 //	LogAync(
-//			LOG_STAT,
+//			LOG_DEBUG,
 //			"UdpSender::SendData( "
 //			"this : %p, "
 //			"fd : %d, "

@@ -1,0 +1,71 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: mediaserver-svc
+  labels:
+    app: mediaserver
+spec:
+  type: NodePort  #[ClusterIP|NodePort|LoadBalancer|ExternalName]
+  sessionAffinity: ClientIP  #[ClientIP|None]
+  selector:
+    app: mediaserver
+  externalIPs:
+  - 192.168.88.133
+  ports:
+  - name: ws
+    protocol: TCP  
+    port: 9981
+  - name: ice
+    protocol: TCP
+    port: 3478  
+  - name: ice-udp
+    protocol: UDP 
+    port: 3478
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mediaserver-deploy
+  labels:
+    app: mediaserver
+spec:
+  selector:
+    matchLabels:
+      app: mediaserver
+  replicas: 2 # tells deployment to run 2 pods matching the template
+  template:
+    metadata:
+      labels:
+        app: mediaserver
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: kubernetes.io/hostname # node label
+        whenUnsatisfiable: DoNotSchedule # [DoNotSchedule/ScheduleAnyway]
+        labelSelector:
+          matchLabels:
+            app: mediaserver
+      containers:
+      - name: mediaserver
+        image: 192.168.88.133:5000/mediaserver:1.0.1
+        ports:
+        - name: ice
+          containerPort: 3478
+          protocol: TCP
+        - name: ice-udp
+          containerPort: 3478
+          protocol: UDP
+        - name: ws
+          containerPort: 9981
+          protocol: TCP
+        volumeMounts:
+        #- mountPath: /app/live/mediaserver/log
+        #  name: hostlog
+        command: ["/app/live/mediaserver/script/docker_init.sh"]
+        args: []
+      volumes:
+      - name: hostlog
+        hostPath:
+          path: /tmp/mediaserver/log/
+      restartPolicy: Always

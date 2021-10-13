@@ -6,13 +6,17 @@
 APP_DIR=$(dirname $(readlink -f "$0"))/..
 cd $APP_DIR
 
+echo "# Deamon stoping......"
+PID=`cat $APP_DIR/run/deamon.pid 2>/dev/null`
+if [ ! $PID == "" ];then
+  kill -9 $PID
+  rm -f $APP_DIR/run/deamon.pid
+fi
+echo "# Deamon stop OK"
+
 echo "# Mediaserver stoping......"
 ./script/stop_mediaserver.sh
 echo "# Mediaserver stop OK"
-
-echo "# Mediaserver(Test) stoping......"
-./script/stop_mediaserver_test.sh
-echo "# Mediaserver(Test) stop OK"
 
 echo "# Turnserver stoping......"
 ./script/stop_turnserver.sh

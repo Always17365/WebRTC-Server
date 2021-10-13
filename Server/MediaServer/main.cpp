@@ -40,6 +40,9 @@ int main(int argc, char *argv[]) {
 	sa.sa_handler = SIG_IGN;
 	sigemptyset(&sa.sa_mask);
 	sigaction(SIGPIPE, &sa, 0);
+	// 忽略在后台时候进行标准输入输出
+//	signal(SIGTTIN, SIG_IGN);
+//	signal(SIGTTOU, SIG_IGN);
 
 	// 不需要重新执行
 	memset(&sa, 0, sizeof(sa));
@@ -74,8 +77,8 @@ int main(int argc, char *argv[]) {
 	if( gConfFilePath.length() > 0 ) {
 		bFlag = gMediaServer.Start(gConfFilePath);
 	} else {
-		printf("# Usage : ./rtp2rtmp-server [ -f <config file> ] \n");
-		bFlag = gMediaServer.Start("/etc/rtp2rtmp-server.config");
+		printf("# Usage : ./mediaserver [ -f <config file> ] \n");
+		bFlag = gMediaServer.Start("/etc/mediaserver.config");
 	}
 
 	LogManager::GetLogManager()->LogFlushMem2File();
@@ -87,8 +90,11 @@ int main(int argc, char *argv[]) {
 	while( bFlag && gMediaServer.IsRunning() ) {
 		LogManager::GetLogManager()->LogFlushMem2File();
 		fflush(stdout);
-		sleep(5);
+		sleep(1);
 	}
+
+	gMediaServer.Stop();
+	printf("# main() exit \n");
 
 	return EXIT_SUCCESS;
 }
@@ -107,24 +113,37 @@ bool Parse(int argc, char *argv[]) {
 	return true;
 }
 
-void SignalFunc(int sign_no) {
-	switch(sign_no) {
+void SignalFunc(int signal) {
+	switch(signal) {
 	case SIGCHLD:{
 		int status;
-		int pid = waitpid(-1, &status, WNOHANG);
-		LogAync(
-				LOG_MSG, "main( waitpid : %d )", pid
+		int pid = 0;
+		while (true) {
+			int pid = waitpid(-1, &status, WNOHANG);
+			if ( pid > 0 ) {
+				printf("# main( Wait Pid : %d ) \n", pid);
+				MainLoop::GetMainLoop()->Call(pid);
+			} else {
+				break;
+			}
+		}
+	}break;
+	case SIGQUIT:
+	case SIGTERM:{
+		LogAyncUnSafe(
+				LOG_ALERT, "main( Get Exit Signal, signal : %d )", signal
 				);
-		MainLoop::GetMainLoop()->Call(pid);
+		gMediaServer.Exit(signal);
+		LogManager::GetLogManager()->LogFlushMem2File();
 	}break;
 	default:{
-		LogAync(
-				LOG_ERR_SYS, "main( Get signal : %d )", sign_no
+		LogAyncUnSafe(
+				LOG_ALERT, "main( Get Error Signal, signal : %d )", signal
 				);
-		gMediaServer.Exit();
+		gMediaServer.Exit(signal);
+		MainLoop::GetMainLoop()->Exit(SIGTERM);
 		LogManager::GetLogManager()->LogFlushMem2File();
-		signal(sign_no, SIG_DFL);
-		kill(getpid(), sign_no);
+		exit(0);
 	}break;
 	}
 }

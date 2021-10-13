@@ -17,7 +17,17 @@
 
 #include <common/Buffer.h>
 
-#define MAX_LOG_BUFFER_LEN 8192
+#define MAX_LOG_BUFFER_LEN 10 * 1024
+
+const char* LOG_LEVEL_DESC[] = {
+		"OFF",
+		"ALERT",
+		"ERR",
+		"WARN",
+		"NOTICE",
+		"INFO",
+		"DEBUG",
+};
 
 /* log thread */
 class LogRunnable : public KRunnable {
@@ -60,9 +70,10 @@ LogManager::LogManager()
 	// TODO Auto-generated constructor stub
 	mIsRunning = false;
 	mpFileCtrl = NULL;
-	mLogLevel = LOG_STAT;
+	mLogLevel = LOG_DEBUG;
 	mpFileCtrlDebug = NULL;
 	mDebugMode = false;
+	mSTDMode = false;
 	mpLogRunnable = new LogRunnable(this);
 }
 
@@ -91,19 +102,21 @@ bool LogManager::Log(const char *file, int line, LOG_LEVEL nLevel, const char *f
 	}
 
     if( bNeedLog ) {
-        char logBuffer[MAX_LOG_BUFFER_LEN];
-		char bitBuffer[64];
-
-	    struct timeval tv;
-	    gettimeofday(&tv, NULL);
+        char logBuffer[MAX_LOG_BUFFER_LEN] = {0};
+		char bitBuffer[128] = {0};
 
 	    //get current time
 	    time_t stm = time(NULL);
         struct tm tTime;
         localtime_r(&stm,&tTime);
-        snprintf(bitBuffer, 64, "[ %d-%02d-%02d %02d:%02d:%02d.%03d tid:%-6d ] %s:%d ",
+
+	    struct timeval tv;
+	    gettimeofday(&tv, NULL);
+
+        snprintf(bitBuffer, sizeof(bitBuffer) - 1, "[ %d-%02d-%02d %02d:%02d:%02d.%03d tid:%-6d ] [%s] %s:%d ",
         		tTime.tm_year+1900, tTime.tm_mon+1, tTime.tm_mday, tTime.tm_hour, tTime.tm_min, tTime.tm_sec, tv.tv_usec / 1000,
 				(int)syscall(SYS_gettid),
+				LOG_LEVEL_DESC[nLevel],
 				file,
 				line
 				);
@@ -124,10 +137,75 @@ bool LogManager::Log(const char *file, int line, LOG_LEVEL nLevel, const char *f
         	mpFileCtrlDebug->LogMsg(logBuffer, (int)strlen(logBuffer), bitBuffer);
         }
 
+        if ( mSTDMode ) {
+        	printf(bitBuffer);
+        	printf(logBuffer);
+        }
+
         bFlag = true;
     }
 
     mMutex.unlock();
+
+	return bFlag;
+}
+
+bool LogManager::LogUnSafe(const char *file, int line, LOG_LEVEL nLevel, const char *format, ...) {
+	bool bFlag = false;
+	if( !mIsRunning ) {
+		return false;
+	}
+
+	bool bNeedLog = false;
+	if( mDebugMode ) {
+		bNeedLog = true;
+	} else if( mLogLevel >= nLevel ) {
+		bNeedLog = true;
+	}
+
+    if( bNeedLog ) {
+        char logBuffer[MAX_LOG_BUFFER_LEN] = {0};
+		char bitBuffer[128] = {0};
+
+	    //get current time
+	    time_t stm = time(NULL);
+        struct tm tTime;
+        localtime_r(&stm,&tTime);
+
+	    struct timeval tv;
+	    gettimeofday(&tv, NULL);
+
+        snprintf(bitBuffer, sizeof(bitBuffer) - 1, "[ %d-%02d-%02d %02d:%02d:%02d.%03d tid:%-6d ] [%s] %s:%d ",
+        		tTime.tm_year+1900, tTime.tm_mon+1, tTime.tm_mday, tTime.tm_hour, tTime.tm_min, tTime.tm_sec, tv.tv_usec / 1000,
+				(int)syscall(SYS_gettid),
+				LOG_LEVEL_DESC[nLevel],
+				file,
+				line
+				);
+
+        //get va_list
+        va_list	agList;
+        va_start(agList, format);
+        vsnprintf(logBuffer, MAX_LOG_BUFFER_LEN - 1, format, agList);
+        va_end(agList);
+
+        strcat(logBuffer, "\n");
+
+        if( mLogLevel >= nLevel ) {
+        	mpFileCtrl->LogMsg(logBuffer, (int)strlen(logBuffer), bitBuffer, true);
+        }
+
+        if( mDebugMode ) {
+        	mpFileCtrlDebug->LogMsg(logBuffer, (int)strlen(logBuffer), bitBuffer, true);
+        }
+
+        if ( mSTDMode ) {
+        	printf(bitBuffer);
+        	printf(logBuffer);
+        }
+
+        bFlag = true;
+    }
 
 	return bFlag;
 }
@@ -264,4 +342,8 @@ void LogManager::LogFlushMem2File() {
 
 void LogManager::SetDebugMode(bool debugMode) {
 	mDebugMode = debugMode;
+}
+
+void LogManager::SetSTDMode(bool stdMode) {
+	mSTDMode = stdMode;
 }

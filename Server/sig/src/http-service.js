@@ -9,8 +9,10 @@ const Https = require('https');
 const Cors = require('@koa/cors');
 // 异步框架
 const Koa = require('koa');
+const Range = require('koa-range');
 // 静态资源
 const Serve = require('koa-static');
+const BodyParser = require('koa-bodyparser');
 // 公共库
 const Fs = require('fs');
 const Path = require('path');
@@ -22,7 +24,7 @@ const AppConfig = require('./config/app-config');
 // 路由
 const Router = require('koa-router');
 // 项目接口
-const loginRouter = require('./router/http/proxy-router');
+const mainRouter = require('./router/http/proxy-router');
 
 // module.exports = class HttpService {
 class HttpService {
@@ -32,6 +34,7 @@ class HttpService {
         // 创建异步框架
         this.app = new Koa();
         this.app.use(Cors());
+        this.app.use(Range);
 
         // 配置静态资源文件
         let staticRoot = new Serve(Path.join(__dirname, 'static'));
@@ -39,29 +42,39 @@ class HttpService {
 
         // 使用session中间件
         this.app.use(Session.getSession());
-
+        this.app.use(BodyParser());
         // 增加公共处理
-        this.app.use(async (ctx, next) => {
-            let sessionId = ctx.session.sessionId;
-            if( Common.isNull(sessionId) ) {
+        this.app.use(async function httpMethod(ctx, next) {
+            if( Common.isNull(ctx.session.sessionId) ) {
                 ctx.session = {
-                    sessionId: 'SESSIONID-' + Math.random().toString(36).substr(2).toLocaleUpperCase(),
-                    count: 0
+                    sessionId: 'USERID-' + Math.random().toString(36).substr(2).toLocaleUpperCase(),
+                    count: 0,
                 }
             } else {
                 ctx.session.count++;
             }
 
-            Common.log('http', 'info','[' + ctx.session.sessionId + ']-request,' + ' (' + ctx.session.count + '), ' + ctx.request.url);
+            let ip = ctx.req.headers["x-orig-ip"];
+            if (Common.isNull(ip)) {
+                ip = ctx.request.ip;
+            }
+            Common.log('http', 'info','[' + ctx.session.sessionId + ']-request,' + ' (' + ctx.session.count + '), ' + ip + ', ' + ctx.request.url + ', ' + ctx.req.method + ', ' + JSON.stringify(ctx.req.headers));
 
             // 等待其他中间件处理的异步返回
             await next();
             // 所有中间件处理完成
+
+            let json = JSON.stringify(ctx.response._body);
+            try {
+                let desc = (json.length < 2046)?json:json.substring(0, 2045)+'...';
+                Common.log('http', 'info','[' + ctx.session.sessionId + ']-response,' + ' (' + ctx.session.count + '), ' + ip + ', ' + ctx.request.url + ', ' + desc);
+            } catch (e) {
+                Common.log('http', 'warn', '[' + ctx.session.sessionId + ']-response, ' +  ' (' + ctx.session.count + '), ' + ip + ', ' + ctx.request.url + ', ' + e.toString());
+            }
         });
 
         // 增加路由
-        this.app.use(loginRouter.routes());
-
+        this.app.use(mainRouter.routes());
     }
 
     start(opts) {

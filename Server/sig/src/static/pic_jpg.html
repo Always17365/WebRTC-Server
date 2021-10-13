@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<title>Snapshot Page</title>
+<head>
+    <meta charset="UTF-8">
+    <title>Title</title>
+    <style id="compiled-css" type="text/css">
+        .display-flex {
+            display: flex;
+            flex-wrap: wrap;
+            text-align: center;
+        }
+
+        .div-size {
+            /*border: 1px solid red;*/
+            width: 230px;
+            /*height: 230px;*/
+            background-size: contain;
+            background-position: center;
+        }
+    </style>
+</head>
+
+<script src="jquery.min.js"></script>
+<script>
+    start = false;
+    function onload() {
+        $("[id=startBtn]").click(function () {
+            start = true;
+            reload();
+        });
+
+        $("[id=stopBtn]").click(function () {
+            start = false;
+        });
+
+        $("[id=emptyBtn]").click( () => {
+            start = false;
+            $("[id=main]").empty();
+
+            for(let i = 0; i < 1000; i++) {
+                let div = "<div id=div" + i + " class=div-size>"+ "</div>";
+                let main = $("[id=main]");
+                main.append(div);
+
+                let imgId=  'img' + i;
+                let label = "<label id=label" + imgId + "></label>"
+                let img = "<img id=" + imgId + " width='230' ></img>";
+                div = $("[id=div" + i + "]");
+
+                div.append(label);
+                div.append(img);
+            }
+        });
+        $("[id=emptyBtn]").click();
+        $("[id=startBtn]").click();
+    }
+
+    function reload() {
+        if ( !start ) {
+            return;
+        }
+        console.log("reload()");
+        let xhr = new XMLHttpRequest();
+        xhr.open("GET", "/pic_jpg", true);
+        xhr.onload = function (e) {
+            if (xhr.readyState === 4 && xhr.status === 200) {
+                if (xhr.status === 200) {
+                    let i = 0;
+                    let json = JSON.parse(xhr.responseText);
+                    json.forEach( (item) => {
+                        let imgId=  'img' + i;
+                        let img = $('#' + imgId);
+                        let now = new Date();
+                        let url = item + '?' +now.getTime();
+                        img.attr('src', url);
+                        i++;
+
+                        let label = $('#label' + imgId);
+                        let name = item.substr(item.lastIndexOf('/') + 1);
+                        label.html(name);
+                        // let img = "<img width='200' src='" + item + "'>";
+                        // $("[id=main]").append(img);
+                    });
+                    for(let j = i; j < 1000; j++) {
+                        let imgId=  'img' + j;
+                        let img = $('#' + imgId);
+                        img.removeAttr("src");
+                        let label = $('#label' + imgId);
+                        label.html("");
+                    }
+                } else {
+                    console.error(xhr.statusText);
+                }
+            }
+
+            setTimeout(() => {
+                reload();
+            }, 3000);
+        };
+        xhr.onerror = function (e) {
+            console.error(xhr.statusText);
+            setTimeout(() => {
+                reload();
+            }, 3000);
+        };
+        xhr.send(null);
+    }
+
+    document.addEventListener("DOMContentLoaded", function() {
+        onload();
+    });
+</script>
+
+<body>
+    <button id="startBtn">Start</button>
+    <button id="stopBtn">Stop</button>
+    <button id="emptyBtn">Empty</button>
+    <div id="main" class="display-flex">
+    </div>
+</body>
+</html>

@@ -34,7 +34,7 @@ int DtlsSession::SSL_Generate_Keys(X509** certificate, EVP_PKEY** privateKey) {
 	bool bFlag = true;
 
 	LogAync(
-			LOG_MSG,
+			LOG_INFO,
 			"DtlsSession::SSL_Generate_Keys("
 			")"
 			);
@@ -48,7 +48,7 @@ int DtlsSession::SSL_Generate_Keys(X509** certificate, EVP_PKEY** privateKey) {
     bne = BN_new();
     if ( !bne ) {
     	LogAync(
-    			LOG_MSG,
+    			LOG_INFO,
     			"DtlsSession::SSL_Generate_Keys( "
 				"[BN_new() Fail] "
     			")"
@@ -60,7 +60,7 @@ int DtlsSession::SSL_Generate_Keys(X509** certificate, EVP_PKEY** privateKey) {
         if (!BN_set_word(bne, RSA_F4)) {
         	/* RSA_F4 == 65537 */
         	LogAync(
-        			LOG_MSG,
+        			LOG_INFO,
         			"DtlsSession::SSL_Generate_Keys( "
     				"[BN_set_word() Fail] "
         			")"
@@ -72,9 +72,9 @@ int DtlsSession::SSL_Generate_Keys(X509** certificate, EVP_PKEY** privateKey) {
     if( bFlag ) {
         /* Generate a RSA key. */
         rsa_key = RSA_new();
-        if ( !bFlag || !rsa_key) {
+        if ( !bFlag || !rsa_key ) {
         	LogAync(
-        			LOG_MSG,
+        			LOG_INFO,
         			"DtlsSession::SSL_Generate_Keys( "
     				"[RSA_new() Fail] "
         			")"
@@ -87,7 +87,7 @@ int DtlsSession::SSL_Generate_Keys(X509** certificate, EVP_PKEY** privateKey) {
 		/* This takes some time. */
 		if (!RSA_generate_key_ex(rsa_key, num_bits, bne, NULL)) {
         	LogAync(
-        			LOG_MSG,
+        			LOG_INFO,
         			"DtlsSession::SSL_Generate_Keys( "
     				"[RSA_generate_key_ex() Fail] "
         			")"
@@ -101,7 +101,7 @@ int DtlsSession::SSL_Generate_Keys(X509** certificate, EVP_PKEY** privateKey) {
 		*privateKey = EVP_PKEY_new();
 		if (!*privateKey) {
         	LogAync(
-        			LOG_MSG,
+        			LOG_INFO,
         			"DtlsSession::SSL_Generate_Keys( "
     				"[EVP_PKEY_new() Fail] "
         			")"
@@ -113,7 +113,7 @@ int DtlsSession::SSL_Generate_Keys(X509** certificate, EVP_PKEY** privateKey) {
     if( bFlag ) {
 		if (!EVP_PKEY_assign_RSA(*privateKey, rsa_key)) {
         	LogAync(
-        			LOG_MSG,
+        			LOG_INFO,
         			"DtlsSession::SSL_Generate_Keys( "
     				"[EVP_PKEY_assign_RSA() Fail] "
         			")"
@@ -130,7 +130,7 @@ int DtlsSession::SSL_Generate_Keys(X509** certificate, EVP_PKEY** privateKey) {
 		*certificate = X509_new();
 		if (!*certificate) {
         	LogAync(
-        			LOG_MSG,
+        			LOG_INFO,
         			"DtlsSession::SSL_Generate_Keys( "
     				"[X509_new() Fail] "
         			")"
@@ -156,7 +156,7 @@ int DtlsSession::SSL_Generate_Keys(X509** certificate, EVP_PKEY** privateKey) {
 		/* Set the public key for the certificate using the key. */
 		if (!X509_set_pubkey(*certificate, *privateKey)) {
         	LogAync(
-        			LOG_MSG,
+        			LOG_INFO,
         			"DtlsSession::SSL_Generate_Keys( "
     				"[X509_set_pubkey() Fail] "
         			")"
@@ -170,7 +170,7 @@ int DtlsSession::SSL_Generate_Keys(X509** certificate, EVP_PKEY** privateKey) {
 		cert_name = X509_get_subject_name(*certificate);
 		if (!cert_name) {
         	LogAync(
-        			LOG_MSG,
+        			LOG_INFO,
         			"DtlsSession::SSL_Generate_Keys( "
     				"[X509_get_subject_name() Fail] "
         			")"
@@ -186,7 +186,7 @@ int DtlsSession::SSL_Generate_Keys(X509** certificate, EVP_PKEY** privateKey) {
 		/* It is self-signed so set the issuer name to be the same as the subject. */
 		if (!X509_set_issuer_name(*certificate, cert_name)) {
         	LogAync(
-        			LOG_MSG,
+        			LOG_INFO,
         			"DtlsSession::SSL_Generate_Keys( "
     				"[X509_set_issuer_name() Fail] "
         			")"
@@ -199,7 +199,7 @@ int DtlsSession::SSL_Generate_Keys(X509** certificate, EVP_PKEY** privateKey) {
 		/* Sign the certificate with the private key. */
 		if (!X509_sign(*certificate, *privateKey, EVP_sha1())) {
         	LogAync(
-        			LOG_MSG,
+        			LOG_INFO,
         			"DtlsSession::SSL_Generate_Keys( "
     				"[X509_sign() Fail] "
         			")"
@@ -222,7 +222,7 @@ int DtlsSession::SSL_Generate_Keys(X509** certificate, EVP_PKEY** privateKey) {
 //    }
 
 	LogAync(
-			LOG_MSG,
+			LOG_INFO,
 			"DtlsSession::SSL_Generate_Keys( "
 			"[%s] "
 			")",
@@ -293,7 +293,7 @@ void DtlsSession::SSL_Info_Callback(const SSL* s, int where, int ret) {
 	}
 
 	LogAync(
-			LOG_STAT,
+			LOG_INFO,
 			"DtlsSession::SSL_Info_Callback( "
 			"this : %p, "
 			"[%s], "
@@ -361,23 +361,42 @@ bool DtlsSession::GobalInit(const string& certPath, const string& keyPath) {
 	    }
 	}
 
-	LogAync(
-			LOG_ERR_USER,
-			"DtlsSession::GobalInit( "
-			"[%s], "
-			"SSL-Version : %s, "
-			"SSL-Error : %s, "
-			"gFingerPrint : %s, "
-			"certPath : %s, "
-			"keyPath : %s "
-			")",
-			FLAG_2_STRING(bFlag),
-			OpenSSL_version(OPENSSL_VERSION),
-			ERR_reason_error_string(ERR_get_error()),
-			gFingerprint,
-			certPath.c_str(),
-			keyPath.c_str()
-			);
+	if ( bFlag ) {
+		LogAync(
+				LOG_NOTICE,
+				"DtlsSession::GobalInit( "
+				"[%s], "
+				"SSL-Version : %s, "
+				"gFingerPrint : %s, "
+				"certPath : %s, "
+				"keyPath : %s "
+				")",
+				FLAG_2_STRING(bFlag),
+				OpenSSL_version(OPENSSL_VERSION),
+				gFingerprint,
+				certPath.c_str(),
+				keyPath.c_str()
+				);
+	} else {
+		LogAync(
+				LOG_ALERT,
+				"DtlsSession::GobalInit( "
+				"[%s], "
+				"SSL-Version : %s, "
+				"SSL-Error : %s, "
+				"gFingerPrint : %s, "
+				"certPath : %s, "
+				"keyPath : %s "
+				")",
+				FLAG_2_STRING(bFlag),
+				OpenSSL_version(OPENSSL_VERSION),
+				ERR_reason_error_string(ERR_get_error()),
+				gFingerprint,
+				certPath.c_str(),
+				keyPath.c_str()
+				);
+	}
+
 
 	return bFlag;
 }
@@ -386,7 +405,8 @@ const unsigned char *DtlsSession::GetFingerprint() {
 	return gFingerprint;
 }
 
-DtlsSession::DtlsSession() {
+DtlsSession::DtlsSession()
+:mClientMutex(KMutex::MutexType_Recursive) {
 	// TODO Auto-generated constructor stub
 	mRunning = false;
 	mpSocketSender = NULL;
@@ -409,15 +429,17 @@ void DtlsSession::SetSocketSender(SocketSender *sender) {
 	mpSocketSender = sender;
 }
 
-bool DtlsSession::Start() {
+bool DtlsSession::Start(bool bActive) {
 	bool bFlag = true;
 
 	LogAync(
-			LOG_MSG,
+			LOG_INFO,
 			"DtlsSession::Start( "
 			"this : %p, "
+			"bActive : %s "
 			")",
-			this
+			this,
+			BOOL_2_STRING(bActive)
 			);
 
 	mClientMutex.lock();
@@ -443,8 +465,11 @@ bool DtlsSession::Start() {
 //    	BIO_ctrl(mpWriteBIO, BIO_CTRL_DGRAM_SET_MTU, MTU, NULL);
 
     	SSL_set_bio(mpSSL, mpReadBIO, mpWriteBIO);
-    	SSL_set_connect_state(mpSSL);
-//    	SSL_set_accept_state(mpSSL);
+    	if ( bActive ) {
+    		SSL_set_connect_state(mpSSL);
+    	} else {
+    		SSL_set_accept_state(mpSSL);
+    	}
     	EC_KEY *ecdh = EC_KEY_new_by_curve_name(NID_X9_62_prime256v1);
     	SSL_set_options(mpSSL, SSL_OP_SINGLE_ECDH_USE);
     	SSL_set_tmp_ecdh(mpSSL, ecdh);
@@ -453,7 +478,7 @@ bool DtlsSession::Start() {
 
 	if( bFlag ) {
 		LogAync(
-				LOG_MSG,
+				LOG_INFO,
 				"DtlsSession::Start( "
 				"this : %p, "
 				"[OK] "
@@ -462,7 +487,7 @@ bool DtlsSession::Start() {
 				);
 	} else {
 		LogAync(
-				LOG_ERR_SYS,
+				LOG_ALERT,
 				"DtlsSession::Start( "
 				"this : %p, "
 				"[Fail] "
@@ -483,7 +508,7 @@ void DtlsSession::Stop() {
 		mRunning = false;
 
 		LogAync(
-				LOG_MSG,
+				LOG_INFO,
 				"DtlsSession::Stop( "
 				"this : %p "
 				")",
@@ -514,7 +539,7 @@ void DtlsSession::Stop() {
 		mDtlsSessionStatus = DtlsSessionStatus_None;
 
 		LogAync(
-				LOG_MSG,
+				LOG_INFO,
 				"DtlsSession::Stop( "
 				"this : %p, "
 				"[OK] "
@@ -553,17 +578,21 @@ bool DtlsSession::Handshake() {
 	bool bFlag = true;
 
 	LogAync(
-			LOG_MSG,
+			LOG_INFO,
 			"DtlsSession::Handshake( "
 			"this : %p "
 			")",
 			this
 			);
 
+	int ret;
+	mClientMutex.lock();
 	if ( mpSSL ) {
-		int ret = SSL_do_handshake(mpSSL);
-		bFlag = FlushSSL();
+		ret = SSL_do_handshake(mpSSL);
 	}
+	mClientMutex.unlock();
+
+	bFlag = FlushSSL();
 
 	return bFlag;
 }
@@ -572,9 +601,11 @@ bool DtlsSession::RecvFrame(const char* frame, unsigned int size) {
 	bool bFlag = false;
 
 	if( IsDTLS(frame, size) && (mDtlsSessionStatus != DtlsSessionStatus_HandshakeDone) ) {
+		mClientMutex.lock();
 		int written = BIO_write(mpReadBIO, frame, size);
+
 		LogAync(
-				LOG_STAT,
+				LOG_DEBUG,
 				"DtlsSession::RecvFrame( "
 				"this : %p, "
 				"written : %d "
@@ -604,9 +635,9 @@ bool DtlsSession::RecvFrame(const char* frame, unsigned int size) {
 		    			);
 		    }
 		}
+		mClientMutex.unlock();
 
 		bFlag = FlushSSL();
-
 	} else {
 		bFlag = false;
 	}
@@ -617,9 +648,12 @@ bool DtlsSession::RecvFrame(const char* frame, unsigned int size) {
 bool DtlsSession::FlushSSL() {
 	bool bFlag = true;
 
+	mClientMutex.lock();
 	int pending = BIO_ctrl_pending(mpWriteBIO);
+	mClientMutex.unlock();
+
 	LogAync(
-			LOG_STAT,
+			LOG_DEBUG,
 			"DtlsSession::FlushSSL( "
 			"this : %p, "
 			"pending : %d "
@@ -632,9 +666,11 @@ bool DtlsSession::FlushSSL() {
 	int dataSize = 0;
 	while (pending > 0) {
 		dataSize = MIN(pending, 1500);
+		mClientMutex.lock();
 		int pktSize = BIO_read(mpWriteBIO, dataBuffer, dataSize);
+		mClientMutex.unlock();
 		LogAync(
-				LOG_STAT,
+				LOG_DEBUG,
 				"DtlsSession::FlushSSL( "
 				"this : %p, "
 				"sent : %d "
@@ -652,8 +688,10 @@ bool DtlsSession::FlushSSL() {
     		bFlag = false;
     	}
 
+    	mClientMutex.lock();
 		/* Check if there's anything left to send (e.g., fragmented packets) */
 		pending = BIO_ctrl_pending(mpWriteBIO);
+		mClientMutex.unlock();
 	}
 
 	if( bFlag ) {
@@ -664,6 +702,7 @@ bool DtlsSession::FlushSSL() {
 }
 
 void DtlsSession::CheckHandshake() {
+	mClientMutex.lock();
 	if ( (mDtlsSessionStatus == DtlsSessionStatus_HandshakeDone) && SSL_is_init_finished(mpSSL) ) {
 		// Check if peer send certificate
 		X509 *cert = SSL_get_peer_certificate(mpSSL);
@@ -711,7 +750,7 @@ void DtlsSession::CheckHandshake() {
             memcpy(&mServerKey[SRTP_MASTER_KEY_LENGTH], serverSalt, SRTP_MASTER_SALT_LENGTH);
 
 			LogAync(
-					LOG_MSG,
+					LOG_INFO,
 					"DtlsSession::CheckHandshake( "
 					"this : %p, "
 					"[DTLS Handshake OK], "
@@ -743,6 +782,7 @@ void DtlsSession::CheckHandshake() {
 					);
         }
 	}
+	mClientMutex.unlock();
 }
 
 bool DtlsSession::IsDTLS(const char *frame, unsigned len) {

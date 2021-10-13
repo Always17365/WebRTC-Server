@@ -19,7 +19,7 @@ module.exports = class SendMsgHandler extends BaseHandler {
     }
 
     static getRoute() {
-        return 'imShare/sendMsg';
+        return 'imP2P/sendMsg';
     }
 
     async handle(ctx, reqData) {
