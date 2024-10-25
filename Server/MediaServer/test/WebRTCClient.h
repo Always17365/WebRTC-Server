@@ -27,7 +27,7 @@
 #include <rtp/RtpRawClient.h>
 #include <webrtc/IceClient.h>
 
-namespace mediaserver {
+namespace qpidnetwork {
 typedef list<string> RtcpFbList;
 typedef struct SdpPayload {
 	unsigned int payload_type;
@@ -80,10 +80,12 @@ public:
 			unsigned int rtpDstAudioPort = 10000
 			);
 	bool Start(
-			const string& sdp,
-			const string& name
+			const string sdp,
+			const string name,
+			bool bTcpFoce = true
 			);
 	void Stop();
+	void Shutdown();
 	void UpdateCandidate(const string& sdp);
 
 private:
@@ -155,6 +157,6 @@ private:
 	KMutex mRtpTransformPidMutex;
 };
 
-} /* namespace mediaserver */
+} /* namespace qpidnetwork */
 
 #endif /* WebRTCClient_WebRTCClient_H_ */

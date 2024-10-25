@@ -2909,7 +2909,7 @@ struct {								\
 #endif
 
 #ifndef MG_ENABLE_SSL
-#define MG_ENABLE_SSL 0
+#define MG_ENABLE_SSL 1
 #endif
 
 #ifndef MG_ENABLE_SYNC_RESOLVER
@@ -4290,7 +4290,11 @@ struct mg_connection *mg_connect_ws_opt(struct mg_mgr *mgr,
  * for shutdown connection's socket
  */
 void mg_connect_ws_shutdown(struct mg_connection *nc);
-
+/*
+ * add by Max 2023-02-22
+ * for close connection's socket
+ */
+void mg_close_conn(struct mg_connection *nc);
 /*
  * Send WebSocket frame to the remote end.
  *

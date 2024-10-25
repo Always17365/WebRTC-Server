@@ -21,7 +21,7 @@
 // Common
 #include <common/LogManager.h>
 
-namespace mediaserver {
+namespace qpidnetwork {
 
 enum {
 	kMinFramePeriodHistoryLength = 60
@@ -110,7 +110,7 @@ void OveruseEstimator::Update(int64_t t_delta, double ts_delta, int size_delta,
 //		RTC_LOG(LS_ERROR)
 //				<< "The over-use estimator's covariance matrix is no longer "
 //						"semi-definite.";
-		LogAync(LOG_WARNING, "OveruseEstimator::Update( "
+		LogAync(LOG_WARN, "OveruseEstimator::Update( "
 				"this : %p, "
 				"[The over-use estimator's covariance matrix is no longer], "
 				"t_delta : %lld, "
@@ -165,4 +165,4 @@ void OveruseEstimator::UpdateNoiseEstimate(double residual, double ts_delta,
 		var_noise_ = 1;
 	}
 }
-}  // namespace mediaserver
+}  // namespace qpidnetwork

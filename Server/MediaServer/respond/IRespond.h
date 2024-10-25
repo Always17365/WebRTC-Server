@@ -14,19 +14,16 @@
 
 #include <string>
 using namespace std;
-
-namespace mediaserver {
+namespace qpidnetwork {
 class IRespond {
 public:
 	virtual ~IRespond(){};
 
-	/**
-	 * 获取返回数据
-	 * @param buffer 数据二进制数组
-	 * @param len	 数组长度
-	 * @return 使用的数组长度
-	 */
-	virtual int GetData(char* buffer, int len, bool &more) = 0;
+public:
+	virtual unsigned StatusCode() const = 0;
+	virtual void SetStatusCode(unsigned statusCode) = 0;
+	virtual string StatusMsg() const = 0;
+	virtual string Result() const = 0;
 };
 }
 #endif /* REQUEST_IRESPOND_H_ */

@@ -9,6 +9,6 @@
 #ifndef VERSION_H_
 #define VERSION_H_
 
-#define VERSION_STRING "1.0.8"
+#define VERSION_STRING "1.1.0"
 
 #endif /* VERSION_H_ */

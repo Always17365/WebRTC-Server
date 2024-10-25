@@ -64,6 +64,10 @@ LogManager *LogManager::GetLogManager() {
 	return gLogManager;
 }
 
+string LogManager::LogLevelDesc(LOG_LEVEL nLevel) {
+	return LOG_LEVEL_DESC[nLevel];
+}
+
 LogManager::LogManager()
 :mMutex(KMutex::MutexType_Recursive)
 {
@@ -84,6 +88,103 @@ LogManager::~LogManager() {
 		delete mpLogRunnable;
 		mpLogRunnable = NULL;
 	}
+}
+
+bool LogManager::Log(const char *file, int line, const char *func, LOG_LEVEL nLevel, const char *format, ...) {
+	bool bFlag = false;
+	if( !mIsRunning ) {
+		return false;
+	}
+
+	mMutex.lock();
+
+	bool bNeedLog = false;
+	if( mDebugMode ) {
+		bNeedLog = true;
+	} else if( mLogLevel >= nLevel ) {
+		bNeedLog = true;
+	}
+
+    if( bNeedLog ) {
+        char logBuffer[MAX_LOG_BUFFER_LEN] = {0};
+		char bitBuffer[128] = {0};
+
+	    //get current time
+	    time_t stm = time(NULL);
+        struct tm tTime;
+        localtime_r(&stm,&tTime);
+
+	    struct timeval tv;
+	    gettimeofday(&tv, NULL);
+
+        snprintf(bitBuffer, sizeof(bitBuffer) - 1, "[ %d-%02d-%02d %02d:%02d:%02d.%03d tid:%-5d ] [%s] %s:%d:%s ",
+        		tTime.tm_year+1900, tTime.tm_mon+1, tTime.tm_mday, tTime.tm_hour, tTime.tm_min, tTime.tm_sec, (int)(tv.tv_usec / 1000),
+				(int)syscall(SYS_gettid),
+				LOG_LEVEL_DESC[nLevel],
+				file,
+				line,
+				func
+				);
+
+        //get va_list
+        va_list	agList;
+        va_start(agList, format);
+        int vret = vsnprintf(logBuffer, MAX_LOG_BUFFER_LEN - 1, format, agList);
+        va_end(agList);
+
+        strcat(logBuffer, "\n");
+
+        if ( mSTDMode ) {
+        	char levelBuffer[32] = {0};
+        	switch(nLevel) {
+        	case LOG_ALERT:
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "\033[35m[%s]\033[0m", LOG_LEVEL_DESC[nLevel]);
+        		break;
+        	case LOG_ERR:
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "\033[31m[%s]\033[0m", LOG_LEVEL_DESC[nLevel]);
+        		break;
+        	case LOG_WARN:
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "\033[33m[%s]\033[0m", LOG_LEVEL_DESC[nLevel]);
+        		break;
+        	case LOG_NOTICE:
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "\033[36m[%s]\033[0m", LOG_LEVEL_DESC[nLevel]);
+        		break;
+        	case LOG_INFO:
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "\033[32m[%s]\033[0m", LOG_LEVEL_DESC[nLevel]);
+        		break;
+        	case LOG_DEBUG:
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "\033[37m[%s]\033[0m", LOG_LEVEL_DESC[nLevel]);
+        		break;
+        	default:{
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "[%s]", LOG_LEVEL_DESC[nLevel]);
+        	}break;
+        	}
+
+            snprintf(bitBuffer, sizeof(bitBuffer) - 1, "[ %d-%02d-%02d %02d:%02d:%02d.%03d tid:%-5d ] %s %s:%d ",
+            		tTime.tm_year+1900, tTime.tm_mon+1, tTime.tm_mday, tTime.tm_hour, tTime.tm_min, tTime.tm_sec, (int)(tv.tv_usec / 1000),
+    				(int)syscall(SYS_gettid),
+					levelBuffer,
+    				file,
+    				line
+    				);
+        	printf(bitBuffer);
+        	printf(logBuffer);
+        } else {
+            if( mDebugMode ) {
+            	mpFileCtrlDebug->LogMsg(logBuffer, (int)strlen(logBuffer), bitBuffer);
+            }
+
+            if (mLogLevel >= nLevel) {
+            	mpFileCtrl->LogMsg(logBuffer, (int)strlen(logBuffer), bitBuffer);
+            }
+        }
+
+        bFlag = true;
+    }
+
+    mMutex.unlock();
+
+	return bFlag;
 }
 
 bool LogManager::Log(const char *file, int line, LOG_LEVEL nLevel, const char *format, ...) {
@@ -113,8 +214,8 @@ bool LogManager::Log(const char *file, int line, LOG_LEVEL nLevel, const char *f
 	    struct timeval tv;
 	    gettimeofday(&tv, NULL);
 
-        snprintf(bitBuffer, sizeof(bitBuffer) - 1, "[ %d-%02d-%02d %02d:%02d:%02d.%03d tid:%-6d ] [%s] %s:%d ",
-        		tTime.tm_year+1900, tTime.tm_mon+1, tTime.tm_mday, tTime.tm_hour, tTime.tm_min, tTime.tm_sec, tv.tv_usec / 1000,
+        snprintf(bitBuffer, sizeof(bitBuffer) - 1, "[ %d-%02d-%02d %02d:%02d:%02d.%03d tid:%-5d ] [%s] %s:%d ",
+        		tTime.tm_year+1900, tTime.tm_mon+1, tTime.tm_mday, tTime.tm_hour, tTime.tm_min, tTime.tm_sec, (int)(tv.tv_usec / 1000),
 				(int)syscall(SYS_gettid),
 				LOG_LEVEL_DESC[nLevel],
 				file,
@@ -124,22 +225,54 @@ bool LogManager::Log(const char *file, int line, LOG_LEVEL nLevel, const char *f
         //get va_list
         va_list	agList;
         va_start(agList, format);
-        vsnprintf(logBuffer, MAX_LOG_BUFFER_LEN - 1, format, agList);
+        int vret = vsnprintf(logBuffer, MAX_LOG_BUFFER_LEN - 1, format, agList);
         va_end(agList);
 
         strcat(logBuffer, "\n");
 
-        if( mLogLevel >= nLevel ) {
-        	mpFileCtrl->LogMsg(logBuffer, (int)strlen(logBuffer), bitBuffer);
-        }
-
-        if( mDebugMode ) {
-        	mpFileCtrlDebug->LogMsg(logBuffer, (int)strlen(logBuffer), bitBuffer);
-        }
-
         if ( mSTDMode ) {
+        	char levelBuffer[32] = {0};
+        	switch(nLevel) {
+        	case LOG_ALERT:
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "\033[35m[%s]\033[0m", LOG_LEVEL_DESC[nLevel]);
+        		break;
+        	case LOG_ERR:
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "\033[31m[%s]\033[0m", LOG_LEVEL_DESC[nLevel]);
+        		break;
+        	case LOG_WARN:
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "\033[33m[%s]\033[0m", LOG_LEVEL_DESC[nLevel]);
+        		break;
+        	case LOG_NOTICE:
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "\033[36m[%s]\033[0m", LOG_LEVEL_DESC[nLevel]);
+        		break;
+        	case LOG_INFO:
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "\033[32m[%s]\033[0m", LOG_LEVEL_DESC[nLevel]);
+        		break;
+        	case LOG_DEBUG:
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "\033[37m[%s]\033[0m", LOG_LEVEL_DESC[nLevel]);
+        		break;
+        	default:{
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "[%s]", LOG_LEVEL_DESC[nLevel]);
+        	}break;
+        	}
+
+            snprintf(bitBuffer, sizeof(bitBuffer) - 1, "[ %d-%02d-%02d %02d:%02d:%02d.%03d tid:%-5d ] %s %s:%d ",
+            		tTime.tm_year+1900, tTime.tm_mon+1, tTime.tm_mday, tTime.tm_hour, tTime.tm_min, tTime.tm_sec, (int)(tv.tv_usec / 1000),
+    				(int)syscall(SYS_gettid),
+					levelBuffer,
+    				file,
+    				line
+    				);
         	printf(bitBuffer);
         	printf(logBuffer);
+        } else {
+            if( mDebugMode ) {
+            	mpFileCtrlDebug->LogMsg(logBuffer, (int)strlen(logBuffer), bitBuffer);
+            }
+
+            if (mLogLevel >= nLevel) {
+            	mpFileCtrl->LogMsg(logBuffer, (int)strlen(logBuffer), bitBuffer);
+            }
         }
 
         bFlag = true;
@@ -175,8 +308,8 @@ bool LogManager::LogUnSafe(const char *file, int line, LOG_LEVEL nLevel, const c
 	    struct timeval tv;
 	    gettimeofday(&tv, NULL);
 
-        snprintf(bitBuffer, sizeof(bitBuffer) - 1, "[ %d-%02d-%02d %02d:%02d:%02d.%03d tid:%-6d ] [%s] %s:%d ",
-        		tTime.tm_year+1900, tTime.tm_mon+1, tTime.tm_mday, tTime.tm_hour, tTime.tm_min, tTime.tm_sec, tv.tv_usec / 1000,
+        snprintf(bitBuffer, sizeof(bitBuffer) - 1, "[ %d-%02d-%02d %02d:%02d:%02d.%03d tid:%-5d ] [%s] %s:%d ",
+        		tTime.tm_year+1900, tTime.tm_mon+1, tTime.tm_mday, tTime.tm_hour, tTime.tm_min, tTime.tm_sec, (int)(tv.tv_usec / 1000),
 				(int)syscall(SYS_gettid),
 				LOG_LEVEL_DESC[nLevel],
 				file,
@@ -191,17 +324,50 @@ bool LogManager::LogUnSafe(const char *file, int line, LOG_LEVEL nLevel, const c
 
         strcat(logBuffer, "\n");
 
-        if( mLogLevel >= nLevel ) {
-        	mpFileCtrl->LogMsg(logBuffer, (int)strlen(logBuffer), bitBuffer, true);
-        }
+        if (mSTDMode) {
+        	char levelBuffer[32] = {0};
+        	switch(nLevel) {
+        	case LOG_ALERT:
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "\033[35m[%s]\033[0m", LOG_LEVEL_DESC[nLevel]);
+        		break;
+        	case LOG_ERR:
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "\033[31m[%s]\033[0m", LOG_LEVEL_DESC[nLevel]);
+        		break;
+        	case LOG_WARN:
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "\033[33m[%s]\033[0m", LOG_LEVEL_DESC[nLevel]);
+        		break;
+        	case LOG_NOTICE:
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "\033[36m[%s]\033[0m", LOG_LEVEL_DESC[nLevel]);
+        		break;
+        	case LOG_INFO:
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "\033[32m[%s]\033[0m", LOG_LEVEL_DESC[nLevel]);
+        		break;
+        	case LOG_DEBUG:
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "\033[37m[%s]\033[0m", LOG_LEVEL_DESC[nLevel]);
+        		break;
+        	default:{
+        		snprintf(levelBuffer, sizeof(levelBuffer) - 1, "[%s]", LOG_LEVEL_DESC[nLevel]);
+        	}break;
+        	}
 
-        if( mDebugMode ) {
-        	mpFileCtrlDebug->LogMsg(logBuffer, (int)strlen(logBuffer), bitBuffer, true);
-        }
+            snprintf(bitBuffer, sizeof(bitBuffer) - 1, "[ %d-%02d-%02d %02d:%02d:%02d.%03d tid:%-5d ] %s %s:%d ",
+            		tTime.tm_year+1900, tTime.tm_mon+1, tTime.tm_mday, tTime.tm_hour, tTime.tm_min, tTime.tm_sec, (int)(tv.tv_usec / 1000),
+    				(int)syscall(SYS_gettid),
+					levelBuffer,
+    				file,
+    				line
+    				);
 
-        if ( mSTDMode ) {
         	printf(bitBuffer);
         	printf(logBuffer);
+        } else {
+            if( mDebugMode ) {
+            	mpFileCtrlDebug->LogMsg(logBuffer, (int)strlen(logBuffer), bitBuffer);
+            }
+
+            if (mLogLevel >= nLevel) {
+            	mpFileCtrl->LogMsg(logBuffer, (int)strlen(logBuffer), bitBuffer);
+            }
         }
 
         bFlag = true;
@@ -260,6 +426,7 @@ bool LogManager::Stop() {
 
 	/* stop log thread */
 	mLogThread.Stop();
+	LogFlushMem2File();
 
 	if( mpFileCtrl ) {
 		delete mpFileCtrl;
@@ -332,9 +499,9 @@ void LogManager::LogSetFlushBuffer(unsigned int iLen) {
 }
 
 void LogManager::LogFlushMem2File() {
-	if( mIsRunning ) {
+	if( mpFileCtrl ) {
 		mpFileCtrl->FlushMem2File();
-		if( mDebugMode ) {
+		if( mDebugMode && mpFileCtrlDebug ) {
 			mpFileCtrlDebug->FlushMem2File();
 		}
 	}

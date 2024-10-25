@@ -163,7 +163,11 @@ MG_INTERNAL void mg_ws_handshake(struct mg_connection *nc,
 
 MG_INTERNAL int mg_get_errno(void);
 
-MG_INTERNAL void mg_close_conn(struct mg_connection *conn);
+/*
+ * modify by Max 2023-02-22
+ * for close connection's socket
+ */
+//MG_INTERNAL void mg_close_conn(struct mg_connection *conn);
 
 MG_INTERNAL int mg_http_common_url_parse(const char *url, const char *schema,
                                          const char *schema_tls, int *use_ssl,
@@ -2010,6 +2014,7 @@ MG_INTERNAL void mg_add_conn(struct mg_mgr *mgr, struct mg_connection *c) {
 }
 
 MG_INTERNAL void mg_remove_conn(struct mg_connection *conn) {
+  DBG(("%p %p", conn->mgr, conn));
   if (conn->prev == NULL) conn->mgr->active_connections = conn->next;
   if (conn->prev) conn->prev->next = conn->next;
   if (conn->next) conn->next->prev = conn->prev;
@@ -3126,6 +3131,10 @@ void mg_socket_if_connect_tcp(struct mg_connection *nc,
     nc->err = mg_get_errno() ? mg_get_errno() : 1;
     return;
   }
+  /**
+   * Add by Max 2023/02/24
+   */
+  fcntl(nc->sock, F_SETFD, FD_CLOEXEC);
 #if !defined(MG_ESP8266)
   mg_set_non_blocking_mode(nc->sock);
 #endif
@@ -4284,8 +4293,13 @@ static unsigned int mg_ssl_if_ossl_psk_cb(SSL *ssl, const char *hint,
                                           unsigned int max_identity_len,
                                           unsigned char *psk,
                                           unsigned int max_psk_len) {
-  struct mg_ssl_if_ctx *ctx =
-      (struct mg_ssl_if_ctx *) ssl->ctx->msg_callback_arg;
+	/**
+	 * Modify by Max
+	 * 2023-04-18
+	 */
+//  struct mg_ssl_if_ctx *ctx =
+//      (struct mg_ssl_if_ctx *) ssl->ctx->msg_callback_arg;
+	struct mg_ssl_if_ctx *ctx = (struct mg_ssl_if_ctx *)SSL_get_app_data(ssl);
   size_t key_len = ctx->psk.len - ctx->identity_len - 1;
   DBG(("hint: '%s'", (hint ? hint : "")));
   if (ctx->identity_len + 1 > max_identity_len) {
@@ -4333,9 +4347,14 @@ static enum mg_ssl_if_result mg_ssl_if_ossl_set_psk(struct mg_ssl_if_ctx *ctx,
   ctx->identity_len = strlen(identity);
   mbuf_append(&ctx->psk, identity, ctx->identity_len + 1);
   mbuf_append(&ctx->psk, key, key_len);
-  SSL_CTX_set_psk_client_callback(ctx->ssl_ctx, mg_ssl_if_ossl_psk_cb);
+	/**
+	 * Modify by Max
+	 * 2023-04-18
+	 */
+//  SSL_CTX_set_psk_client_callback(ctx->ssl_ctx, mg_ssl_if_ossl_psk_cb);
   /* Hack: there is no field for us to keep this, so we use msg_callback_arg */
-  ctx->ssl_ctx->msg_callback_arg = ctx;
+//  ctx->ssl_ctx->msg_callback_arg = ctx;
+  SSL_set_app_data(ctx->ssl_ctx, ctx);
   return MG_SSL_OK;
 }
 #else

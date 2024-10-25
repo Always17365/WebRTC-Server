@@ -63,7 +63,7 @@ public:
 	string GetParam(const string& key);
 	string GetPath();
 	HttpType GetType();
-
+	int GetContentLength();
 	const char* GetBody();
 
 private:
@@ -76,6 +76,7 @@ private:
 	string mContentType = "";
 	string mAuth = "";
 	string mRawFirstLine = "";
+	bool mbContinue;
 
 	KMutex mClientMutex;
 	HttpState mState;
@@ -84,6 +85,7 @@ private:
 	bool ParseFirstLine(const string& line);
 	void ParseParameters(const string& line);
 	void ParseHeader(const string& line);
+	void Reset();
 
 	void Lock();
 	void Unlock();

@@ -30,10 +30,11 @@ public:
 	 * 停止请求, 可多线程调用
 	 */
 	void Stop();
+
 	/**
 	 * 开始请求
 	 */
-	bool Request(const string& url, const HttpEntiy* entiy);
+	bool Request(const string& url, const HttpEntiy* entiy, bool closeAfterRequest = true);
 
 	/**
 	 * 获取返回值
@@ -47,6 +48,10 @@ public:
 	 * 获取返回内容
 	 */
 	void GetBody(const char** pBuffer, int& size);
+	/**
+	 * 获取最后一次错误描述
+	 */
+	const char* GetLastError();
 
 	/**
 	 * 清除所有域名cookies
@@ -70,6 +75,7 @@ private:
 	void DestroyBuffer();
 	void ResetBuffer();
 	bool AddRespondBuffer(const char* buf, int size);
+	void Close();
 
 	static CURLcode Curl_SSL_Handle(CURL *curl, void *sslctx, void *param);
 	static size_t CurlHandle(void *buffer, size_t size, size_t nmemb, void *data);
@@ -94,6 +100,7 @@ private:
 	string mContentType;
 	double mContentLength;
 	long mHttpCode;
+	CURLcode mLastRes;
 
 	// stop manually
 	bool mbStop;

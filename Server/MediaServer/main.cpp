@@ -21,18 +21,18 @@ using namespace std;
 #include <server/MainLoop.h>
 
 #include "MediaServer.h"
+using namespace qpidnetwork;
 
 string gConfFilePath = "";  // 配置文件
-static MediaServer gMediaServer;
+static MediaServer gServer;
 
 bool Parse(int argc, char *argv[]);
 void SignalFunc(int sign_no);
-const char *Banner(void);
 
 int main(int argc, char *argv[]) {
 	printf("############## MediaServer ############## \n");
-	printf("# Version : %s \n", VERSION_STRING);
-	printf("# Build date : %s %s \n", __DATE__, __TIME__);
+	printf("# Version:%s \n", VERSION_STRING);
+	printf("# Build date:%s %s \n", __DATE__, __TIME__);
 	srand(time(0));
 
 	// 忽略对已经关闭的Socket发送信息导致错误
@@ -75,10 +75,10 @@ int main(int argc, char *argv[]) {
 
 	bool bFlag = false;
 	if( gConfFilePath.length() > 0 ) {
-		bFlag = gMediaServer.Start(gConfFilePath);
+		bFlag = gServer.Start(gConfFilePath);
 	} else {
-		printf("# Usage : ./mediaserver [ -f <config file> ] \n");
-		bFlag = gMediaServer.Start("/etc/mediaserver.config");
+		printf("# Usage:./mediaserver [ -f <config file> ] \n");
+		bFlag = gServer.Start("/etc/mediaserver.config");
 	}
 
 	LogManager::GetLogManager()->LogFlushMem2File();
@@ -87,13 +87,14 @@ int main(int argc, char *argv[]) {
 		printf("%s", Banner());
 	}
 
-	while( bFlag && gMediaServer.IsRunning() ) {
+	while (bFlag && !gServer.IsNeedStop()) {
 		LogManager::GetLogManager()->LogFlushMem2File();
 		fflush(stdout);
 		sleep(1);
 	}
 
-	gMediaServer.Stop();
+	gServer.Stop();
+	LogManager::GetLogManager()->Stop();
 	printf("# main() exit \n");
 
 	return EXIT_SUCCESS;
@@ -101,66 +102,69 @@ int main(int argc, char *argv[]) {
 
 bool Parse(int argc, char *argv[]) {
 	string key, value;
-	for( int i = 1; (i + 1) < argc; i+=2 ) {
-		key = argv[i];
-		value = argv[i+1];
+	for( int i = 1; i < argc;) {
+		key = argv[i++];
 
 		if( key.compare("-f") == 0 ) {
+			value = argv[i++];
 			gConfFilePath = value;
+		} else if( key.compare("-d") == 0 ) {
+			LogManager::GetLogManager()->SetSTDMode(true);
 		}
 	}
 
 	return true;
 }
 
-void SignalFunc(int signal) {
-	switch(signal) {
+void SignalFunc(int sig) {
+	switch(sig) {
 	case SIGCHLD:{
 		int status;
 		int pid = 0;
 		while (true) {
 			int pid = waitpid(-1, &status, WNOHANG);
 			if ( pid > 0 ) {
-				printf("# main( Wait Pid : %d ) \n", pid);
-				MainLoop::GetMainLoop()->Call(pid);
+				printf("# main, waitpid, pid:%d \n", pid);
+				MainLoop::GetMainLoop()->WaitPid(pid);
 			} else {
 				break;
 			}
 		}
 	}break;
+	case SIGINT:
 	case SIGQUIT:
 	case SIGTERM:{
 		LogAyncUnSafe(
-				LOG_ALERT, "main( Get Exit Signal, signal : %d )", signal
+				LOG_ALERT, "main, Get Exit Signal, sig:%d", sig
 				);
-		gMediaServer.Exit(signal);
+		MainLoop::GetMainLoop()->Exit(SIGKILL);
+		gServer.Exit(sig);
 		LogManager::GetLogManager()->LogFlushMem2File();
+	}break;
+	case SIGBUS:
+	case SIGABRT:
+	case SIGSEGV:{
+		LogAyncUnSafe(
+				LOG_ALERT, "main, Get Error Signal, sig:%d", sig
+				);
+		MainLoop::GetMainLoop()->Exit(SIGKILL);
+		gServer.Exit(sig);
+		LogManager::GetLogManager()->LogFlushMem2File();
+		/**
+		 * 不能调用exit()
+		 * 因为收到sig会进行中断，其他线程可能正在malloc()/free()，进行内核态的锁
+		 * 而调用exit()=>__run_exit_handlers()=>OPENSSL_CLEANUP()=>free()，则会导致死锁
+		 * exit()会写入缓冲区到内核, _exit()不会
+		 */
+		_exit(1);
 	}break;
 	default:{
 		LogAyncUnSafe(
-				LOG_ALERT, "main( Get Error Signal, signal : %d )", signal
+				LOG_ALERT, "main, Get Other Signal, sig:%d", sig
 				);
-		gMediaServer.Exit(signal);
-		MainLoop::GetMainLoop()->Exit(SIGTERM);
+		MainLoop::GetMainLoop()->Exit(SIGKILL);
+		gServer.Exit(sig);
 		LogManager::GetLogManager()->LogFlushMem2File();
-		exit(0);
 	}break;
 	}
-}
-
-const char *Banner(void) {
-	return ("\n"
-			"\033[33;44m.=============================================================.\033[0m\n"
-			"\033[33;44m|\033[1m    __  ___         ___       _____                          \033[0;33;44m|\033[0m\n"
-			"\033[33;44m|\033[1m   /  |/  /__  ____/ (_)___ _/ ___/___  ______   _____  _____\033[0;33;44m|\033[0m\n"
-			"\033[33;44m|\033[1m  / /|_/ / _ \\/ __  / / __ `/\\__ \\/ _ \\/ ___/ | / / _ \\/ ___/\033[0;33;44m|\033[0m\n"
-			"\033[33;44m|\033[1m / /  / /  __/ /_/ / / /_/ /___/ /  __/ /   | |/ /  __/ /    \033[0;33;44m|\033[0m\n"
-			"\033[33;44m|\033[1m/_/  /_/\\___/\\__,_/_/\\__,_//____/\\___/_/    |___/\\___/_/     \033[0;33;44m|\033[0m\n"
-			"\033[33;44m|                                                             |\033[0m\n"
-			"\033[33;44m.=============================================================.\033[0m\n"
-			"\033[33;44m|   MediaServer (Media Gateway for WebRTC)                    |\033[0m\n"
-			"\033[33;44m|   Author: Max.Chiu                                          |\033[0m\n"
-			"\033[33;44m|   Email: Kingsleyyau@gmail.com                              |\033[0m\n"
-			"\033[33;44m.=============================================================.\033[0m\n"
-			);
 }

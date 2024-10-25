@@ -11,14 +11,15 @@
 
 #include "BaseRespond.h"
 
-namespace mediaserver {
+namespace qpidnetwork {
 
 class BaseRawRespond : public BaseRespond {
 public:
 	BaseRawRespond();
 	virtual ~BaseRawRespond();
 
-	int GetData(char* buffer, int len, bool &more);
+	virtual string Result() const override;
+
 	void SetParam(const string& raw);
 
 protected:

@@ -2,7 +2,6 @@
  * File         : Arithmetic.cpp 
  * Date         : 2007-07-12
  * Author       : Keqin Su
- * Copyright    : City Hotspot Co., Ltd.
  * Description  : Class for Arithmetic 
  */
 
@@ -182,7 +181,7 @@ string Arithmetic::Base64Encode(const char* data, int length) {
 		result = code;
 	}
 	if ( code ) {
-		delete code;
+		free(code);
 		code = NULL;
 	}
 	return result;

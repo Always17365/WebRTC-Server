@@ -10,6 +10,7 @@
 #define MEDIASERVER_H_
 
 #include <uuid/uuid.h>
+#include <signal.h>
 
 #include <Version.h>
 
@@ -39,14 +40,14 @@
 #include <include/ErrCode.h>
 #include <include/ForkNotice.h>
 
-using namespace mediaserver;
-
 // STL
 #include <map>
 #include <list>
 using namespace std;
 
 #define REQUEST_TIME_OUT_MS 60000
+
+namespace qpidnetwork {
 
 // 在线连接对象
 struct MediaClient {
@@ -123,20 +124,24 @@ enum ExtRequestType {
 // 在线连接对象
 struct ExtRequestItem {
 	ExtRequestItem() {
-		uuid = "";
 		type = ExtRequestTypeUnknow;
+		uuid = "";
+		extParam = "";
+		req = Json::Value::null;
 	}
 
 	ExtRequestType type;
 	string uuid;
 	string extParam;
-	Json::Value reqRoot;
+	Json::Value req;
 };
 // 在线连接列表, 因为2个Map是同时使用, 所以只需用WebRTCMap的锁
 typedef KSafeMap<WebRTC*, MediaClient*> WebRTCMap;
 typedef KSafeMap<connection_hdl, MediaClient*, std::owner_less<connection_hdl> > WebsocketMap;
-// 在线的用户列表
+// 在线的用户列表(UUID)
 typedef KSafeMap<string, MediaClient*> MediaClientMap;
+// 在线并已经登录的用户列表(USER)
+typedef KSafeMap<string, MediaClient*> MediaUserMap;
 // 空闲的WebRTC列表
 typedef KSafeList<WebRTC *> WebRTCList;
 // 空闲的MediaClient列表
@@ -179,9 +184,13 @@ public:
 	 */
 	bool IsRunning();
 	/**
+	 * 是否需要退出
+	 */
+	bool IsNeedStop();
+	/**
 	 * 清除进程信息
 	 */
-	void Exit(int signal);
+	void Exit(int sig);
 
 	/***************************** 内部服务(HTTP), 命令回调 **************************************/
 	// AsyncIOServerCallback
@@ -195,6 +204,8 @@ public:
 
 	// HttpHandler
 	void OnRequestReloadLogConfig(HttpParser* parser);
+	void OnRequestGetOnlineUsers(HttpParser* parser);
+	void OnRequestKickUser(HttpParser* parser);
 	bool OnRequestUndefinedCommand(HttpParser* parser);
 	/***************************** 内部服务(HTTP), 命令回调 **************************************/
 
@@ -244,7 +255,7 @@ private:
 	/**
 	 * 外部请求线程处理
 	 */
-	void ExtRequestHandle();
+	void ExtRequestHandle(ExtRequestList *requestList);
 
 	/**
 	 * 回收资源线程处理
@@ -298,6 +309,19 @@ private:
 	 * 外部状态改变接口
 	 */
 	bool SendExtSetStatusRequest(HttpClient* httpClient, bool isLogin, const string& param);
+	/**
+	 * 获取外部请求线程
+	 */
+	int GetExtParameters(const string& wholeLine, string& userId);
+
+	// WSHandler
+	bool OnWSRequestPing(Json::Value req, Json::Value &rep);
+	bool OnWSRequestSdpCall(Json::Value req, Json::Value &rep, connection_hdl hdl);
+	bool OnWSRequestSdpPull(Json::Value req, Json::Value &rep, connection_hdl hdl);
+	bool OnWSRequestSdpUpdate(Json::Value req, Json::Value &rep, connection_hdl hdl);
+	bool OnWSRequestLogin(Json::Value req, Json::Value &rep, connection_hdl hdl);
+	bool OnWSRequestGetToken(Json::Value req, Json::Value &rep, connection_hdl hdl);
+
 
 private:
 	/***************************** 内部服务(HTTP)参数 **************************************/
@@ -407,8 +431,12 @@ private:
 	KThread mTimeoutCheckThread;
 
 	// 外部登录校验线程
-	ExtRequestRunnable* mpExtRequestRunnable;
-	KThread mExtRequestThread;
+//	ExtRequestRunnable* mpExtRequestRunnable;
+//	KThread mExtRequestThread;
+	ExtRequestRunnable** mpExtRequestRunnables;
+	KThread **mpExtRequestThreads;
+	// 外部请求处理线程数目
+	int miExtRequestThreadCount;
 
 	// 资源回收线程
 	RecycleRunnable* mpRecycleRunnable;
@@ -421,6 +449,7 @@ private:
 	// 是否运行
 	KMutex mServerMutex;
 	bool mRunning;
+	bool mNeedStop;
 	string mPidFilePath;
 
 	// 配置文件
@@ -437,6 +466,7 @@ private:
 	WebRTCMap mWebRTCMap;
 	WebsocketMap mWebsocketMap;
 	MediaClientMap mMediaClientMap;
+	MediaUserMap mMediaUserMap;
 	// 可用的WebRTC Object
 	WebRTCList mWebRTCList;
 	// 待回收的WebRTC列表
@@ -444,11 +474,14 @@ private:
 	// 可用的MediaClient
 	MediaClientList mMediaClientList;
 	// 外部请求队列
-	ExtRequestList mExtRequestList;
+//	ExtRequestList mExtRequestList;
+	ExtRequestList **mpExtRequestLists;
+	KMutex mExtRequestMutex;
 
 	// 是否需要强制同步在线列表
 	bool mbForceExtSync;
+	long long miExtSyncLastTime;
 	/***************************** 运行参数 end **************************************/
 };
-
+}
 #endif /* MEDIASERVER_H_ */

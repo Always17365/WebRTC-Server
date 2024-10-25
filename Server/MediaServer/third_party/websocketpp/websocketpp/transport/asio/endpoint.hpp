@@ -37,7 +37,6 @@
 
 #include <websocketpp/common/asio.hpp>
 #include <websocketpp/common/functional.hpp>
-#include <websocketpp/common/cmd_handler.hpp>
 
 #include <sstream>
 #include <string>
@@ -423,8 +422,6 @@ public:
 
         m_alog->write(log::alevel::devel,"asio::listen");
 
-        CmdHandler::GetCmdHandler()->Start();
-
         lib::asio::error_code bec;
 
         m_acceptor->open(ep.protocol(),bec);
@@ -655,7 +652,6 @@ public:
 
     /// wraps the stop method of the internal io_service object
     void stop() {
-    	CmdHandler::GetCmdHandler()->Stop();
         m_io_service->stop();
     }
 
